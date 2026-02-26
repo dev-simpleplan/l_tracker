@@ -388,6 +388,18 @@ function renderStats(container, items) {
   });
 }
 
+function refreshAllSections(loans) {
+  const safeLoans = Array.isArray(loans) ? loans : [];
+  cachedLoans = safeLoans;
+  renderLoanPills(safeLoans);
+  renderAllLoansSheet(safeLoans);
+  buildPortfolioStats(safeLoans);
+  buildRecommendationsAndActivity(safeLoans);
+  buildPenaltyTracker(safeLoans);
+  populateLoanSelectors(safeLoans);
+  runGoalPlanner();
+}
+
 function buildPortfolioStats(loans) {
   if (!loans.length) {
     renderStats(portfolioStats, [{ label: "No Data", value: "Add loans to see analytics" }]);
@@ -1061,14 +1073,7 @@ async function renderDashboard() {
   welcomeText.textContent = `Welcome, ${name}`;
 
   const loans = await getLoans();
-  cachedLoans = loans;
-  renderLoanPills(loans);
-  renderAllLoansSheet(loans);
-  buildPortfolioStats(loans);
-  buildRecommendationsAndActivity(loans);
-  buildPenaltyTracker(loans);
-  populateLoanSelectors(loans);
-  runGoalPlanner();
+  refreshAllSections(loans);
 
   showDashboardPage();
 }
@@ -1214,14 +1219,7 @@ async function saveEditedLoan(event) {
   setAppMessage("Loan updated successfully.", false);
   await renderLoanDetails(selectedLoanId);
   const loans = await getLoans();
-  cachedLoans = loans;
-  renderLoanPills(loans);
-  renderAllLoansSheet(loans);
-  buildPortfolioStats(loans);
-  buildRecommendationsAndActivity(loans);
-  buildPenaltyTracker(loans);
-  populateLoanSelectors(loans);
-  runGoalPlanner();
+  refreshAllSections(loans);
 }
 
 async function addLoan(event) {
@@ -1302,12 +1300,10 @@ async function addLoan(event) {
     loanCurrency.value = selectedDisplayCurrency;
   }
   selectedLoanId = insertResult.data.id;
-  await renderLoanDetails(insertResult.data.id);
   const loans = await getLoans();
-  cachedLoans = loans;
-  populateLoanSelectors(loans);
-  buildPenaltyTracker(loans);
-  runGoalPlanner();
+  refreshAllSections(loans);
+  await renderLoanDetails(insertResult.data.id);
+  setAppMessage("Loan created and dashboard refreshed.", false);
 }
 
 async function updateLoanSchedule(loanId, rowIndex, type, value) {
@@ -1351,14 +1347,7 @@ async function updateLoanSchedule(loanId, rowIndex, type, value) {
 
   await renderLoanDetails(loanId);
   const loans = await getLoans();
-  cachedLoans = loans;
-  renderLoanPills(loans);
-  renderAllLoansSheet(loans);
-  buildPortfolioStats(loans);
-  buildRecommendationsAndActivity(loans);
-  buildPenaltyTracker(loans);
-  populateLoanSelectors(loans);
-  runGoalPlanner();
+  refreshAllSections(loans);
 }
 
 function ensureSupabaseConfig() {
@@ -1443,13 +1432,7 @@ async function boot() {
         loanCurrency.value = selectedDisplayCurrency;
       }
       const loans = await getLoans();
-      cachedLoans = loans;
-      renderAllLoansSheet(loans);
-      buildPortfolioStats(loans);
-      buildRecommendationsAndActivity(loans);
-      buildPenaltyTracker(loans);
-      populateLoanSelectors(loans);
-      runGoalPlanner();
+      refreshAllSections(loans);
       if (selectedLoanId) {
         await renderLoanDetails(selectedLoanId);
       }
@@ -1461,24 +1444,23 @@ async function boot() {
       saveDisplayCurrency(selectedDisplayCurrency);
       setAppMessage("Display currency saved.", false);
       const loans = await getLoans();
-      cachedLoans = loans;
-      renderAllLoansSheet(loans);
-      buildPortfolioStats(loans);
-      buildRecommendationsAndActivity(loans);
-      buildPenaltyTracker(loans);
-      populateLoanSelectors(loans);
-      runGoalPlanner();
+      refreshAllSections(loans);
       if (selectedLoanId) {
         await renderLoanDetails(selectedLoanId);
       }
     });
   }
 
-  openAllLoansPage.addEventListener("click", async () => {
-    const loans = await getLoans();
-    renderAllLoansSheet(loans);
-    showAllLoansSheetPage();
-  });
+  if (openAllLoansPage) {
+    openAllLoansPage.addEventListener("click", async () => {
+      // Open instantly with cached data, then sync from server.
+      renderAllLoansSheet(cachedLoans);
+      showAllLoansSheetPage();
+      const loans = await getLoans();
+      refreshAllSections(loans);
+      renderAllLoansSheet(loans);
+    });
+  }
 
   loanForm.addEventListener("submit", addLoan);
   backToDashboard.addEventListener("click", () => {
