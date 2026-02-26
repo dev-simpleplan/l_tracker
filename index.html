@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loan Tracker</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="main-header card">
+        <div class="brand">
+          <div class="logo-badge">LT</div>
+          <div>
+            <h2>Loan Tracker Pro</h2>
+            <p class="muted">Track EMIs, interest, and reminders</p>
+          </div>
+        </div>
+        <button id="themeToggle" class="btn" type="button">Dark Mode</button>
+      </header>
+
+      <section id="authView" class="auth-layout">
+        <article class="card auth-card auth-left">
+          <h1>Welcome Back</h1>
+          <p class="muted">Create an account or login to view your loans.</p>
+
+          <div class="tabs">
+            <button id="showLogin" class="tab active" type="button">Login</button>
+            <button id="showSignup" class="tab" type="button">Sign Up</button>
+          </div>
+
+          <form id="loginForm" class="form">
+            <label>
+              Email
+              <input type="email" id="loginEmail" required />
+            </label>
+            <label>
+              Password
+              <input type="password" id="loginPassword" required />
+            </label>
+            <button class="btn primary" type="submit">Login</button>
+          </form>
+
+          <form id="signupForm" class="form hidden">
+            <label>
+              Name
+              <input type="text" id="signupName" required />
+            </label>
+            <label>
+              Email
+              <input type="email" id="signupEmail" required />
+            </label>
+            <label>
+              Password
+              <input type="password" id="signupPassword" required />
+            </label>
+            <button class="btn primary" type="submit">Create Account</button>
+          </form>
+
+          <p id="authMessage" class="message"></p>
+        </article>
+        <article class="card auth-side">
+          <h3>What You Can Do</h3>
+          <ul class="due-list">
+            <li>Track all loans in one dashboard with box cards and full analytics.</li>
+            <li>Get exact due reminders synced with your deduction day and system date.</li>
+            <li>Measure principal vs interest split and estimate interest savings from prepayments.</li>
+            <li>Use Goal Planner to predict closure date if you add fixed monthly extra.</li>
+            <li>Monitor overdue penalties with grace-days and daily late-fee tracking.</li>
+            <li>Export loan or full portfolio statements instantly as CSV or printable PDF.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section id="appView" class="hidden">
+        <section class="card currency-bar">
+          <div class="currency-controls">
+            <label>
+              Display Currency
+              <select id="globalCurrency">
+                <option value="AUTO">Auto (Use each loan currency)</option>
+                <option value="USD">USD - US Dollar</option>
+                <option value="INR">INR - Indian Rupee</option>
+                <option value="EUR">EUR - Euro</option>
+                <option value="GBP">GBP - British Pound</option>
+                <option value="AED">AED - UAE Dirham</option>
+                <option value="CAD">CAD - Canadian Dollar</option>
+              </select>
+            </label>
+            <button id="saveCurrencyBtn" class="btn" type="button">Save Currency</button>
+          </div>
+          <p class="muted">Display format only. Amount conversion across currencies is not applied.</p>
+        </section>
+
+        <section id="dashboardSection">
+          <header class="topbar card">
+            <div>
+              <h2>Dashboard</h2>
+              <p id="welcomeText" class="muted"></p>
+            </div>
+            <div class="detail-actions">
+              <button id="openAllLoansPage" class="btn" type="button">All Loans Sheet</button>
+              <button id="logoutBtn" class="btn" type="button">Logout</button>
+            </div>
+          </header>
+          <p id="appMessage" class="message app-message"></p>
+          <section class="grid insights-grid">
+            <article class="card">
+              <h3>Portfolio Insights</h3>
+              <div id="portfolioStats" class="stats-grid"></div>
+            </article>
+            <article class="card">
+              <h3>Due Reminders</h3>
+              <ul id="dueList" class="due-list"></ul>
+            </article>
+          </section>
+          <section class="grid insights-grid">
+            <article class="card">
+              <h3>Smart Recommendations</h3>
+              <ul id="recommendationList" class="due-list"></ul>
+            </article>
+            <article class="card">
+              <h3>Recent Activity</h3>
+              <ul id="activityList" class="due-list"></ul>
+            </article>
+          </section>
+
+          <section class="grid">
+            <article class="card">
+              <h3>All Loans</h3>
+              <p class="muted">Click a loan card to open full month-wise details.</p>
+              <div id="loanPills" class="loan-grid"></div>
+            </article>
+
+            <article class="card">
+              <h3>Add New Loan</h3>
+              <form id="loanForm" class="form">
+                <label>
+                  Loan Name
+                  <input type="text" id="loanName" required placeholder="Home Loan" />
+                </label>
+                <label>
+                  Total Amount
+                  <input type="number" id="loanAmount" min="1" required />
+                </label>
+                <label>
+                  Duration (Months)
+                  <input type="number" id="loanDuration" min="1" required />
+                </label>
+                <label>
+                  Monthly EMI
+                  <input type="number" id="loanEmi" min="1" required />
+                </label>
+                <label>
+                  Annual Interest Rate (%)
+                  <input type="number" id="loanRate" min="0" step="0.01" value="0" required />
+                </label>
+                <label>
+                  Processing Fee (One-time)
+                  <input type="number" id="loanFee" min="0" step="0.01" value="0" />
+                </label>
+                <label>
+                  Late Fee Per Day
+                  <input type="number" id="loanLateFee" min="0" step="0.01" value="0" />
+                </label>
+                <label>
+                  Grace Days
+                  <input type="number" id="loanGraceDays" min="0" max="30" value="0" />
+                </label>
+                <label>
+                  Currency
+                  <select id="loanCurrency" required>
+                    <option value="USD">USD - US Dollar</option>
+                    <option value="INR">INR - Indian Rupee</option>
+                    <option value="EUR">EUR - Euro</option>
+                    <option value="GBP">GBP - British Pound</option>
+                    <option value="AED">AED - UAE Dirham</option>
+                    <option value="CAD">CAD - Canadian Dollar</option>
+                  </select>
+                </label>
+                <label>
+                  Deduction Day (Due Date)
+                  <input type="number" id="loanDeductionDay" min="1" max="28" value="5" required />
+                </label>
+                <label>
+                  Start Month
+                  <input type="month" id="loanStart" required />
+                </label>
+                <button class="btn primary" type="submit">Create Loan</button>
+              </form>
+            </article>
+          </section>
+          <section class="grid insights-grid">
+            <article class="card">
+              <h3>Goal Planner</h3>
+              <div class="form">
+                <label>
+                  Loan
+                  <select id="goalLoanSelect"></select>
+                </label>
+                <label>
+                  Extra Amount per Month
+                  <input id="goalExtraInput" type="number" min="0" value="0" />
+                </label>
+                <button id="runGoalPlanBtn" class="btn primary" type="button">Run Plan</button>
+              </div>
+              <div id="goalPlanResult" class="stats-grid detail-stats"></div>
+            </article>
+            <article class="card">
+              <h3>Penalty Tracker</h3>
+              <div id="penaltyStats" class="stats-grid detail-stats"></div>
+              <ul id="penaltyLogList" class="due-list"></ul>
+            </article>
+          </section>
+          <section class="grid insights-grid">
+            <article class="card">
+              <h3>Export Center</h3>
+              <div class="form">
+                <label>
+                  Loan for single export
+                  <select id="exportLoanSelect"></select>
+                </label>
+                <div class="detail-actions">
+                  <button id="exportLoanCsvBtn" class="btn" type="button">Export Loan CSV</button>
+                  <button id="exportLoanPdfBtn" class="btn" type="button">Export Loan PDF</button>
+                </div>
+                <div class="detail-actions">
+                  <button id="exportPortfolioCsvBtn" class="btn" type="button">Export Portfolio CSV</button>
+                  <button id="exportPortfolioPdfBtn" class="btn" type="button">Export Portfolio PDF</button>
+                </div>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section id="detailPage" class="hidden">
+          <header class="topbar card">
+            <div>
+              <h2>Loan Details</h2>
+              <p id="detailMeta" class="muted"></p>
+            </div>
+            <div class="detail-actions">
+              <button id="editLoanBtn" class="btn" type="button">Edit Loan</button>
+              <button id="backToDashboard" class="btn" type="button">Back</button>
+              <button id="logoutBtnDetail" class="btn" type="button">Logout</button>
+            </div>
+          </header>
+
+          <section id="detailSection" class="card">
+            <h3 id="detailTitle">Loan Details</h3>
+            <p class="muted">Extra amount reduces from the last EMI months first.</p>
+            <section id="editLoanPanel" class="card hidden">
+              <h4>Edit Existing Loan</h4>
+              <form id="editLoanForm" class="form">
+                <label>
+                  Loan Name
+                  <input type="text" id="editLoanName" required />
+                </label>
+                <label>
+                  Total Amount
+                  <input type="number" id="editLoanAmount" min="1" required />
+                </label>
+                <label>
+                  Duration (Months)
+                  <input type="number" id="editLoanDuration" min="1" required />
+                </label>
+                <label>
+                  Monthly EMI
+                  <input type="number" id="editLoanEmi" min="1" required />
+                </label>
+                <label>
+                  Annual Interest Rate (%)
+                  <input type="number" id="editLoanRate" min="0" step="0.01" required />
+                </label>
+                <label>
+                  Processing Fee (One-time)
+                  <input type="number" id="editLoanFee" min="0" step="0.01" />
+                </label>
+                <label>
+                  Late Fee Per Day
+                  <input type="number" id="editLoanLateFee" min="0" step="0.01" />
+                </label>
+                <label>
+                  Grace Days
+                  <input type="number" id="editLoanGraceDays" min="0" max="30" />
+                </label>
+                <label>
+                  Currency
+                  <select id="editLoanCurrency" required>
+                    <option value="USD">USD - US Dollar</option>
+                    <option value="INR">INR - Indian Rupee</option>
+                    <option value="EUR">EUR - Euro</option>
+                    <option value="GBP">GBP - British Pound</option>
+                    <option value="AED">AED - UAE Dirham</option>
+                    <option value="CAD">CAD - Canadian Dollar</option>
+                  </select>
+                </label>
+                <label>
+                  Deduction Day (Due Date)
+                  <input type="number" id="editLoanDeductionDay" min="1" max="28" required />
+                </label>
+                <label>
+                  Start Month
+                  <input type="month" id="editLoanStart" required />
+                </label>
+                <div class="detail-actions">
+                  <button type="submit" class="btn primary">Save Changes</button>
+                  <button type="button" id="cancelEditLoan" class="btn">Cancel</button>
+                </div>
+              </form>
+            </section>
+            <div id="detailStats" class="stats-grid detail-stats"></div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Due Date</th>
+                    <th>Interest</th>
+                    <th>Principal</th>
+                    <th>EMI Due</th>
+                    <th>Extra Amount</th>
+                    <th>Total Due</th>
+                    <th>Status</th>
+                    <th>Remaining</th>
+                    <th>Mark Paid</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduleBody"></tbody>
+              </table>
+            </div>
+            <p class="muted legend">
+              Green = paid, Red = overdue unpaid after due date, Gray = closed by earlier payment.
+            </p>
+          </section>
+        </section>
+
+        <section id="allLoansPage" class="hidden">
+          <header class="topbar card">
+            <div>
+              <h2>All Loans Sheet</h2>
+              <p class="muted">Loan names on left, months on top.</p>
+            </div>
+            <div class="detail-actions">
+              <button id="backFromAllLoans" class="btn" type="button">Back</button>
+              <button id="logoutBtnAllLoans" class="btn" type="button">Logout</button>
+            </div>
+          </header>
+
+          <section class="card">
+            <div class="table-wrap">
+              <table id="allLoansTable" class="matrix-table">
+                <thead id="allLoansHead"></thead>
+                <tbody id="allLoansBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </section>
+      <footer class="main-footer muted">Made by Nikhil Jaiswal</footer>
+    </main>
+
+    <script>
+      (function () {
+        const loginTab = document.getElementById("showLogin");
+        const signupTab = document.getElementById("showSignup");
+        const loginForm = document.getElementById("loginForm");
+        const signupForm = document.getElementById("signupForm");
+
+        function switchAuth(showLogin) {
+          if (!loginTab || !signupTab || !loginForm || !signupForm) return;
+          loginTab.classList.toggle("active", showLogin);
+          signupTab.classList.toggle("active", !showLogin);
+          loginForm.classList.toggle("hidden", !showLogin);
+          signupForm.classList.toggle("hidden", showLogin);
+        }
+
+        if (loginTab && signupTab) {
+          loginTab.addEventListener("click", function () {
+            switchAuth(true);
+          });
+          signupTab.addEventListener("click", function () {
+            switchAuth(false);
+          });
+        }
+      })();
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
