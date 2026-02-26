@@ -1364,9 +1364,9 @@ async function updateLoanSchedule(loanId, rowIndex, type, value) {
     return;
   }
 
-  await renderLoanDetails(loanId);
   const loans = await getLoans();
   refreshAllSections(loans);
+  await renderLoanDetails(loanId);
 }
 
 function ensureSupabaseConfig() {

@@ -351,6 +351,18 @@ tr.closed {
   color: var(--closed);
 }
 
+tr.paid td {
+  background: #dcfce7;
+}
+
+tr.overdue td {
+  background: #fee2e2;
+}
+
+tr.closed td {
+  background: #f1f5f9;
+}
+
 .muted {
   color: var(--muted);
 }
