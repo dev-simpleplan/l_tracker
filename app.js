@@ -4,6 +4,7 @@ const showLoginBtn = document.getElementById("showLogin");
 const showSignupBtn = document.getElementById("showSignup");
 const loginForm = document.getElementById("loginForm");
 const signupForm = document.getElementById("signupForm");
+const googleLoginBtn = document.getElementById("googleLoginBtn");
 const authMessage = document.getElementById("authMessage");
 const themeToggle = document.getElementById("themeToggle");
 const welcomeText = document.getElementById("welcomeText");
@@ -1120,6 +1121,24 @@ async function login(event) {
   await renderDashboard();
 }
 
+async function loginWithGoogle() {
+  if (!supabaseClient) {
+    setAuthMessage("Supabase is not initialized.");
+    return;
+  }
+
+  const { error } = await supabaseClient.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: window.location.origin + window.location.pathname,
+    },
+  });
+
+  if (error) {
+    setAuthMessage(error.message);
+  }
+}
+
 async function logout() {
   try {
     if (supabaseClient && supabaseClient.auth) {
@@ -1375,6 +1394,9 @@ async function boot() {
 
   loginForm.addEventListener("submit", login);
   signupForm.addEventListener("submit", signup);
+  if (googleLoginBtn) {
+    googleLoginBtn.addEventListener("click", loginWithGoogle);
+  }
   if (runGoalPlanBtn) {
     runGoalPlanBtn.addEventListener("click", () => {
       runGoalPlanner();

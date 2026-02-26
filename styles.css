@@ -192,6 +192,14 @@ select {
   color: white;
 }
 
+.oauth-btn {
+  width: 100%;
+  margin-bottom: 12px;
+  border-color: #d5b89e;
+  background: linear-gradient(145deg, #fff8ec, #fceede);
+  font-weight: 600;
+}
+
 .topbar {
   display: flex;
   align-items: center;
