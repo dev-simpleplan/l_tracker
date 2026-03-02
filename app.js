@@ -877,55 +877,63 @@ function setAppMessage(text, isError = true) {
   appMessage.textContent = text;
 }
 
+function getMissingColumnFromError(message) {
+  if (typeof message !== "string") return "";
+  const match = message.match(/column\\s+[^.]+\\.([a-zA-Z0-9_]+)\\s+does not exist/i);
+  return match && match[1] ? match[1] : "";
+}
+
+async function insertLoanAdaptive(payload) {
+  const mutablePayload = { ...payload };
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await supabaseClient.from("loans").insert(mutablePayload).select("id").single();
+    if (!result.error) return result;
+
+    const missingColumn = getMissingColumnFromError(result.error.message);
+    if (!missingColumn || !(missingColumn in mutablePayload)) {
+      return result;
+    }
+    delete mutablePayload[missingColumn];
+  }
+
+  return { data: null, error: { message: "Insert failed after adaptive retries." } };
+}
+
+async function updateLoanAdaptive(loanId, userId, payload) {
+  const mutablePayload = { ...payload };
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await supabaseClient
+      .from("loans")
+      .update(mutablePayload)
+      .eq("id", loanId)
+      .eq("user_id", userId);
+
+    if (!result.error) return result;
+
+    const missingColumn = getMissingColumnFromError(result.error.message);
+    if (!missingColumn || !(missingColumn in mutablePayload)) {
+      return result;
+    }
+    delete mutablePayload[missingColumn];
+  }
+
+  return { error: { message: "Update failed after adaptive retries." } };
+}
+
 async function getLoans() {
   if (!currentUser) return [];
-  const modernQuery = await supabaseClient
+  const query = await supabaseClient
     .from("loans")
-    .select(
-      "id, user_id, name, amount, duration_months, emi, annual_rate, processing_fee, deduction_day, late_fee_per_day, grace_days, currency_code, start_month, schedule, created_at"
-    )
+    .select("*")
     .eq("user_id", currentUser.id)
     .order("created_at", { ascending: false });
 
-  if (!modernQuery.error) {
-    return (modernQuery.data || []).map(normalizeLoan);
-  }
-
-  const isMissingNewColumns =
-    modernQuery.error &&
-    typeof modernQuery.error.message === "string" &&
-    (modernQuery.error.message.includes("annual_rate") ||
-      modernQuery.error.message.includes("processing_fee") ||
-      modernQuery.error.message.includes("deduction_day") ||
-      modernQuery.error.message.includes("late_fee_per_day") ||
-      modernQuery.error.message.includes("grace_days"));
-
-  if (!isMissingNewColumns) {
-    setAppMessage(modernQuery.error.message);
+  if (query.error) {
+    setAppMessage(query.error.message);
     return [];
   }
 
-  const legacyQuery = await supabaseClient
-    .from("loans")
-    .select("id, user_id, name, amount, duration_months, emi, currency_code, start_month, schedule, created_at")
-    .eq("user_id", currentUser.id)
-    .order("created_at", { ascending: false });
-
-  if (legacyQuery.error) {
-    setAppMessage(legacyQuery.error.message);
-    return [];
-  }
-
-  return (legacyQuery.data || []).map((loan) =>
-    normalizeLoan({
-      ...loan,
-      annual_rate: 0,
-      processing_fee: 0,
-      deduction_day: 1,
-      late_fee_per_day: 0,
-      grace_days: 0,
-    })
-  );
+  return (query.data || []).map(normalizeLoan);
 }
 
 function renderLoanPills(loans) {
@@ -1301,37 +1309,7 @@ async function saveEditedLoan(event) {
     schedule: resizedSchedule,
   };
 
-  let updateResult = await supabaseClient
-    .from("loans")
-    .update(fullPayload)
-    .eq("id", selectedLoanId)
-    .eq("user_id", currentUser.id);
-
-  const hasMissingColumnError =
-    updateResult.error &&
-    typeof updateResult.error.message === "string" &&
-    (updateResult.error.message.includes("annual_rate") ||
-      updateResult.error.message.includes("processing_fee") ||
-      updateResult.error.message.includes("deduction_day") ||
-      updateResult.error.message.includes("late_fee_per_day") ||
-      updateResult.error.message.includes("grace_days"));
-
-  if (hasMissingColumnError) {
-    const legacyPayload = {
-      name,
-      amount,
-      duration_months: durationMonths,
-      emi,
-      currency_code: currencyCode,
-      start_month: normalizeStartMonth(startMonthInput),
-      schedule: resizedSchedule,
-    };
-    updateResult = await supabaseClient
-      .from("loans")
-      .update(legacyPayload)
-      .eq("id", selectedLoanId)
-      .eq("user_id", currentUser.id);
-  }
+  const updateResult = await updateLoanAdaptive(selectedLoanId, currentUser.id, fullPayload);
 
   if (updateResult.error) {
     setAppMessage(updateResult.error.message);
@@ -1391,62 +1369,11 @@ async function addLoan(event) {
   setLoading(true, "Creating loan...");
   setLoanSubmitDisabled(true);
   try {
-    let insertResult = await withTimeout(
-      supabaseClient.from("loans").insert(payload).select("id").single(),
+    const insertResult = await withTimeout(
+      insertLoanAdaptive(payload),
       REQUEST_TIMEOUT_MS,
       "Create loan request timed out."
     );
-    const missingColsError =
-      insertResult.error && typeof insertResult.error.message === "string" ? insertResult.error.message : "";
-
-    if (missingColsError) {
-      const legacyPayload = {
-        user_id: currentUser.id,
-        name,
-        amount,
-        duration_months: durationMonths,
-        emi,
-        currency_code: currencyCode || "USD",
-        deduction_day: deductionDay,
-        start_month: normalizeStartMonth(startMonthInput),
-        schedule: createDefaultSchedule(durationMonths),
-      };
-
-      if (
-        missingColsError.includes("annual_rate") ||
-        missingColsError.includes("processing_fee") ||
-        missingColsError.includes("late_fee_per_day") ||
-        missingColsError.includes("grace_days")
-      ) {
-        insertResult = await withTimeout(
-          supabaseClient.from("loans").insert(legacyPayload).select("id").single(),
-          REQUEST_TIMEOUT_MS,
-          "Create loan request timed out."
-        );
-      }
-
-      if (
-        insertResult.error &&
-        typeof insertResult.error.message === "string" &&
-        insertResult.error.message.includes("deduction_day")
-      ) {
-        const minimalPayload = {
-          user_id: currentUser.id,
-          name,
-          amount,
-          duration_months: durationMonths,
-          emi,
-          currency_code: currencyCode || "USD",
-          start_month: normalizeStartMonth(startMonthInput),
-          schedule: createDefaultSchedule(durationMonths),
-        };
-        insertResult = await withTimeout(
-          supabaseClient.from("loans").insert(minimalPayload).select("id").single(),
-          REQUEST_TIMEOUT_MS,
-          "Create loan request timed out."
-        );
-      }
-    }
 
     if (insertResult.error) {
       setAppMessage(insertResult.error.message);
