@@ -12,6 +12,7 @@ create table if not exists public.loans (
   deduction_day integer not null default 1,
   late_fee_per_day numeric not null default 0,
   grace_days integer not null default 0,
+  calc_mode text not null default 'calculated',
   currency_code text not null default 'USD',
   start_month date not null,
   schedule jsonb not null default '[]'::jsonb,
@@ -35,6 +36,9 @@ add column if not exists late_fee_per_day numeric not null default 0;
 
 alter table public.loans
 add column if not exists grace_days integer not null default 0;
+
+alter table public.loans
+add column if not exists calc_mode text not null default 'calculated';
 
 alter table public.loans enable row level security;
 

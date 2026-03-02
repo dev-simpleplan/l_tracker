@@ -20,6 +20,7 @@ const logoutBtnAllLoans = document.getElementById("logoutBtnAllLoans");
 const openAllLoansPage = document.getElementById("openAllLoansPage");
 const loanForm = document.getElementById("loanForm");
 const loanCurrency = document.getElementById("loanCurrency");
+const loanCalcMode = document.getElementById("loanCalcMode");
 const loanPills = document.getElementById("loanPills");
 const detailSection = document.getElementById("detailSection");
 const detailTitle = document.getElementById("detailTitle");
@@ -33,6 +34,7 @@ const editLoanName = document.getElementById("editLoanName");
 const editLoanAmount = document.getElementById("editLoanAmount");
 const editLoanDuration = document.getElementById("editLoanDuration");
 const editLoanEmi = document.getElementById("editLoanEmi");
+const editLoanCalcMode = document.getElementById("editLoanCalcMode");
 const editLoanRate = document.getElementById("editLoanRate");
 const editLoanFee = document.getElementById("editLoanFee");
 const editLoanLateFee = document.getElementById("editLoanLateFee");
@@ -238,6 +240,7 @@ function normalizeLoan(loan) {
     amount: Math.max(parseNumber(loan.amount), 0),
     emi: Math.max(parseNumber(loan.emi), 0),
     duration_months: duration,
+    calc_mode: loan.calc_mode === "tracking" ? "tracking" : "calculated",
     annual_rate: Math.max(parseNumber(loan.annual_rate), 0),
     processing_fee: Math.max(parseNumber(loan.processing_fee), 0),
     deduction_day: Math.max(1, Math.min(parseInt(loan.deduction_day, 10) || 1, 28)),
@@ -258,10 +261,15 @@ function buildBaseRows(loan) {
     const dueDate = dueDateForIndex(loan.start_month, i, loan.deduction_day);
     const monthName = monthLabelFromIndex(loan.start_month, i);
 
-    const interestDue = remainingPrincipal > 0 ? remainingPrincipal * monthlyRate : 0;
-    const plannedEmi =
-      remainingPrincipal > 0 ? Math.min(loan.emi, remainingPrincipal + interestDue) : 0;
-    const principalDue = Math.max(plannedEmi - interestDue, 0);
+    let interestDue = 0;
+    let plannedEmi = loan.emi;
+    let principalDue = loan.emi;
+
+    if (loan.calc_mode === "calculated") {
+      interestDue = remainingPrincipal > 0 ? remainingPrincipal * monthlyRate : 0;
+      plannedEmi = remainingPrincipal > 0 ? Math.min(loan.emi, remainingPrincipal + interestDue) : 0;
+      principalDue = Math.max(plannedEmi - interestDue, 0);
+    }
 
     rows.push({
       index: i,
@@ -278,7 +286,9 @@ function buildBaseRows(loan) {
       isOverdue: false,
     });
 
-    remainingPrincipal = Math.max(remainingPrincipal - principalDue, 0);
+    if (loan.calc_mode === "calculated") {
+      remainingPrincipal = Math.max(remainingPrincipal - principalDue, 0);
+    }
   }
 
   return rows;
@@ -316,9 +326,14 @@ function applyTailExtraReduction(rows, plannerMonthlyExtra = 0) {
 
 function finalizeRows(rows, loan) {
   let remainingPrincipal = loan.amount;
+  let trackingRemaining = rows.reduce((sum, row) => sum + row.emiDue, 0);
   const today = new Date();
   return rows.map((row) => {
-    remainingPrincipal = Math.max(remainingPrincipal - row.principalDue, 0);
+    if (loan.calc_mode === "calculated") {
+      remainingPrincipal = Math.max(remainingPrincipal - row.principalDue, 0);
+    } else {
+      trackingRemaining = Math.max(trackingRemaining - row.emiDue, 0);
+    }
     const isClosed = row.emiDue <= 0.0001;
     const graceDate = new Date(row.dueDate);
     graceDate.setDate(graceDate.getDate() + loan.grace_days);
@@ -333,7 +348,7 @@ function finalizeRows(rows, loan) {
       interestDue: Math.max(row.interestDue, 0),
       principalDue: Math.max(row.principalDue, 0),
       totalDue: Math.max(row.emiDue + row.extra, 0),
-      remaining: remainingPrincipal,
+      remaining: loan.calc_mode === "calculated" ? remainingPrincipal : trackingRemaining,
       isClosed,
       isOverdue,
       overdueDays,
@@ -411,6 +426,7 @@ function openEditPanel(loan) {
   editLoanAmount.value = loan.amount || 0;
   editLoanDuration.value = loan.duration_months || 1;
   editLoanEmi.value = loan.emi || 0;
+  editLoanCalcMode.value = loan.calc_mode || "calculated";
   editLoanRate.value = loan.annual_rate || 0;
   editLoanFee.value = loan.processing_fee || 0;
   editLoanLateFee.value = loan.late_fee_per_day || 0;
@@ -418,12 +434,27 @@ function openEditPanel(loan) {
   editLoanCurrency.value = loan.currency_code || "USD";
   editLoanDeductionDay.value = loan.deduction_day || 1;
   editLoanStart.value = toMonthInputValue(loan.start_month);
+  syncCalcModeFields(editLoanCalcMode.value, true);
   editLoanPanel.classList.remove("hidden");
 }
 
 function closeEditPanel() {
   if (!editLoanPanel) return;
   editLoanPanel.classList.add("hidden");
+}
+
+function syncCalcModeFields(mode, isEdit = false) {
+  const rateInput = isEdit ? editLoanRate : document.getElementById("loanRate");
+  const feeInput = isEdit ? editLoanFee : document.getElementById("loanFee");
+  const lateFeeInput = isEdit ? editLoanLateFee : document.getElementById("loanLateFee");
+  const graceInput = isEdit ? editLoanGraceDays : document.getElementById("loanGraceDays");
+  const trackingMode = mode === "tracking";
+
+  [rateInput, feeInput, lateFeeInput, graceInput].forEach((input) => {
+    if (!input) return;
+    input.disabled = trackingMode;
+    if (trackingMode) input.value = 0;
+  });
 }
 
 function renderStats(container, items) {
@@ -1058,6 +1089,7 @@ async function renderLoanDetails(loanId) {
   const computed = computeSchedule(loan);
   const rows = computed.rows;
   const totals = computed.totals;
+  const modeLabel = loan.calc_mode === "tracking" ? "Tracking only" : "Calculated";
 
   detailTitle.textContent = loan.name;
   detailMeta.textContent = `${formatCurrency(loan.amount, getDisplayCurrency(loan))} | APR ${percent(
@@ -1068,6 +1100,7 @@ async function renderLoanDetails(loanId) {
 
   renderStats(detailStats, [
     { label: "Projected Interest", value: formatCurrency(totals.projectedInterest, getDisplayCurrency(loan)) },
+    { label: "Mode", value: modeLabel },
     { label: "Interest Paid", value: formatCurrency(totals.paidInterest, getDisplayCurrency(loan)) },
     { label: "Principal Paid", value: formatCurrency(totals.paidPrincipal, getDisplayCurrency(loan)) },
     { label: "Interest Saved", value: formatCurrency(totals.interestSaved, getDisplayCurrency(loan)) },
@@ -1280,6 +1313,7 @@ async function saveEditedLoan(event) {
   const amount = Math.max(parseNumber(editLoanAmount.value), 0);
   const durationMonths = Math.max(parseInt(editLoanDuration.value, 10) || 0, 1);
   const emi = Math.max(parseNumber(editLoanEmi.value), 0);
+  const calcMode = editLoanCalcMode.value === "tracking" ? "tracking" : "calculated";
   const annualRate = Math.max(parseNumber(editLoanRate.value), 0);
   const processingFee = Math.max(parseNumber(editLoanFee.value), 0);
   const lateFeePerDay = Math.max(parseNumber(editLoanLateFee.value), 0);
@@ -1299,6 +1333,7 @@ async function saveEditedLoan(event) {
     amount,
     duration_months: durationMonths,
     emi,
+    calc_mode: calcMode,
     annual_rate: annualRate,
     processing_fee: processingFee,
     late_fee_per_day: lateFeePerDay,
@@ -1329,6 +1364,7 @@ async function addLoan(event) {
   const amount = Math.max(parseNumber(document.getElementById("loanAmount").value), 0);
   const durationMonths = Math.max(parseInt(document.getElementById("loanDuration").value, 10) || 0, 1);
   const emi = Math.max(parseNumber(document.getElementById("loanEmi").value), 0);
+  const calcMode = loanCalcMode && loanCalcMode.value === "tracking" ? "tracking" : "calculated";
   const annualRate = Math.max(parseNumber(document.getElementById("loanRate").value), 0);
   const processingFee = Math.max(parseNumber(document.getElementById("loanFee").value), 0);
   const lateFeePerDay = Math.max(parseNumber(document.getElementById("loanLateFee").value), 0);
@@ -1356,6 +1392,7 @@ async function addLoan(event) {
     amount,
     duration_months: durationMonths,
     emi,
+    calc_mode: calcMode,
     annual_rate: annualRate,
     processing_fee: processingFee,
     late_fee_per_day: lateFeePerDay,
@@ -1381,6 +1418,9 @@ async function addLoan(event) {
     }
 
     loanForm.reset();
+    if (loanCalcMode) {
+      syncCalcModeFields(loanCalcMode.value, false);
+    }
     if (loanCurrency && selectedDisplayCurrency !== "AUTO") {
       loanCurrency.value = selectedDisplayCurrency;
     }
@@ -1474,6 +1514,17 @@ async function boot() {
 
   loginForm.addEventListener("submit", login);
   signupForm.addEventListener("submit", signup);
+  if (loanCalcMode) {
+    syncCalcModeFields(loanCalcMode.value, false);
+    loanCalcMode.addEventListener("change", (event) => {
+      syncCalcModeFields(event.target.value, false);
+    });
+  }
+  if (editLoanCalcMode) {
+    editLoanCalcMode.addEventListener("change", (event) => {
+      syncCalcModeFields(event.target.value, true);
+    });
+  }
   if (googleLoginBtn) {
     googleLoginBtn.addEventListener("click", loginWithGoogle);
   }
