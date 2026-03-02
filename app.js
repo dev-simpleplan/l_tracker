@@ -61,6 +61,8 @@ const backFromAllLoans = document.getElementById("backFromAllLoans");
 const allLoansHead = document.getElementById("allLoansHead");
 const allLoansBody = document.getElementById("allLoansBody");
 const scheduleBody = document.getElementById("scheduleBody");
+const loadingOverlay = document.getElementById("loadingOverlay");
+const loadingText = document.getElementById("loadingText");
 
 const SUPABASE_URL = window.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "";
@@ -73,6 +75,7 @@ let selectedLoanId = null;
 let selectedDisplayCurrency = "AUTO";
 let selectedLoanData = null;
 let cachedLoans = [];
+let dashboardRenderPromise = null;
 
 function parseNumber(value) {
   const number = Number(value);
@@ -126,6 +129,14 @@ function applyTheme(theme) {
 
 function saveTheme(theme) {
   localStorage.setItem(THEME_KEY, theme);
+}
+
+function setLoading(isLoading, text = "Loading...") {
+  if (!loadingOverlay) return;
+  if (loadingText) {
+    loadingText.textContent = text;
+  }
+  loadingOverlay.classList.toggle("hidden", !isLoading);
 }
 
 function monthLabelFromIndex(startMonth, offset) {
@@ -1062,6 +1073,11 @@ async function renderLoanDetails(loanId) {
 }
 
 async function renderDashboard() {
+  if (dashboardRenderPromise) {
+    return dashboardRenderPromise;
+  }
+
+  dashboardRenderPromise = (async () => {
   if (!currentUser) {
     showAuth();
     return;
@@ -1078,6 +1094,13 @@ async function renderDashboard() {
   refreshAllSections(loans);
 
   showDashboardPage();
+  })();
+
+  try {
+    await dashboardRenderPromise;
+  } finally {
+    dashboardRenderPromise = null;
+  }
 }
 
 async function signup(event) {
@@ -1108,18 +1131,22 @@ async function login(event) {
   event.preventDefault();
   const email = document.getElementById("loginEmail").value.trim().toLowerCase();
   const password = document.getElementById("loginPassword").value;
+  setLoading(true, "Signing in...");
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
 
-  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) {
-    setAuthMessage(error.message);
-    return;
+    currentUser = data.user;
+    loginForm.reset();
+    selectedLoanId = null;
+    setAuthMessage("");
+    await renderDashboard();
+  } finally {
+    setLoading(false);
   }
-
-  currentUser = data.user;
-  loginForm.reset();
-  selectedLoanId = null;
-  setAuthMessage("");
-  await renderDashboard();
 }
 
 async function loginWithGoogle() {
@@ -1315,45 +1342,70 @@ async function addLoan(event) {
     schedule: createDefaultSchedule(durationMonths),
   };
 
-  let insertResult = await supabaseClient.from("loans").insert(payload).select("id").single();
-  const hasMissingColumnError =
-    insertResult.error &&
-    typeof insertResult.error.message === "string" &&
-    (insertResult.error.message.includes("annual_rate") ||
-      insertResult.error.message.includes("processing_fee") ||
-      insertResult.error.message.includes("late_fee_per_day") ||
-      insertResult.error.message.includes("grace_days") ||
-      insertResult.error.message.includes("deduction_day"));
+  setLoading(true, "Creating loan...");
+  try {
+    let insertResult = await supabaseClient.from("loans").insert(payload).select("id").single();
+    const missingColsError =
+      insertResult.error && typeof insertResult.error.message === "string" ? insertResult.error.message : "";
 
-  if (hasMissingColumnError) {
-    const legacyPayload = {
-      user_id: currentUser.id,
-      name,
-      amount,
-      duration_months: durationMonths,
-      emi,
-      currency_code: currencyCode || "USD",
-      deduction_day: deductionDay,
-      start_month: normalizeStartMonth(startMonthInput),
-      schedule: createDefaultSchedule(durationMonths),
-    };
-    insertResult = await supabaseClient.from("loans").insert(legacyPayload).select("id").single();
-  }
+    if (missingColsError) {
+      const legacyPayload = {
+        user_id: currentUser.id,
+        name,
+        amount,
+        duration_months: durationMonths,
+        emi,
+        currency_code: currencyCode || "USD",
+        deduction_day: deductionDay,
+        start_month: normalizeStartMonth(startMonthInput),
+        schedule: createDefaultSchedule(durationMonths),
+      };
 
-  if (insertResult.error) {
-    setAppMessage(insertResult.error.message);
-    return;
-  }
+      if (
+        missingColsError.includes("annual_rate") ||
+        missingColsError.includes("processing_fee") ||
+        missingColsError.includes("late_fee_per_day") ||
+        missingColsError.includes("grace_days")
+      ) {
+        insertResult = await supabaseClient.from("loans").insert(legacyPayload).select("id").single();
+      }
 
-  loanForm.reset();
-  if (loanCurrency && selectedDisplayCurrency !== "AUTO") {
-    loanCurrency.value = selectedDisplayCurrency;
+      if (
+        insertResult.error &&
+        typeof insertResult.error.message === "string" &&
+        insertResult.error.message.includes("deduction_day")
+      ) {
+        const minimalPayload = {
+          user_id: currentUser.id,
+          name,
+          amount,
+          duration_months: durationMonths,
+          emi,
+          currency_code: currencyCode || "USD",
+          start_month: normalizeStartMonth(startMonthInput),
+          schedule: createDefaultSchedule(durationMonths),
+        };
+        insertResult = await supabaseClient.from("loans").insert(minimalPayload).select("id").single();
+      }
+    }
+
+    if (insertResult.error) {
+      setAppMessage(insertResult.error.message);
+      return;
+    }
+
+    loanForm.reset();
+    if (loanCurrency && selectedDisplayCurrency !== "AUTO") {
+      loanCurrency.value = selectedDisplayCurrency;
+    }
+    selectedLoanId = insertResult.data.id;
+    const loans = await getLoans();
+    refreshAllSections(loans);
+    await renderLoanDetails(insertResult.data.id);
+    setAppMessage("Loan created and dashboard refreshed.", false);
+  } finally {
+    setLoading(false);
   }
-  selectedLoanId = insertResult.data.id;
-  const loans = await getLoans();
-  refreshAllSections(loans);
-  await renderLoanDetails(insertResult.data.id);
-  setAppMessage("Loan created and dashboard refreshed.", false);
 }
 
 async function updateLoanSchedule(loanId, rowIndex, type, value) {

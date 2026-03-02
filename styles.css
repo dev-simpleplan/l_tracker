@@ -440,6 +440,39 @@ tr.closed td {
   padding: 10px 0;
 }
 
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 24, 38, 0.38);
+  backdrop-filter: blur(2px);
+  display: grid;
+  place-items: center;
+  z-index: 9999;
+}
+
+.loading-overlay > .loader {
+  width: 44px;
+  height: 44px;
+  border: 4px solid #d8dff1;
+  border-top-color: #2b92a6;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  margin: 0 auto 10px;
+}
+
+.loading-overlay p {
+  margin: 0;
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .dark-mode .tab,
 .dark-mode .btn,
 .dark-mode input,
