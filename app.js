@@ -78,6 +78,7 @@ const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "";
 const DISPLAY_CURRENCY_KEY = "loanTrackerDisplayCurrency";
 const THEME_KEY = "loanTrackerTheme";
 const REQUEST_TIMEOUT_MS = 20000;
+const ROUNDING_RESIDUAL_LIMIT = 10;
 
 let supabaseClient = null;
 let currentUser = null;
@@ -297,6 +298,19 @@ function buildBaseRows(loan) {
     if (loan.calc_mode === "calculated") {
       remainingPrincipal = Math.max(remainingPrincipal - principalDue, 0);
     }
+  }
+
+  // Clear tiny end-of-loan residue caused by floating/rounding math.
+  if (
+    loan.calc_mode === "calculated" &&
+    rows.length > 0 &&
+    remainingPrincipal > 0 &&
+    remainingPrincipal <= ROUNDING_RESIDUAL_LIMIT
+  ) {
+    const lastRow = rows[rows.length - 1];
+    lastRow.principalDue += remainingPrincipal;
+    lastRow.emiDue += remainingPrincipal;
+    remainingPrincipal = 0;
   }
 
   return rows;
@@ -1074,8 +1088,8 @@ function renderLoanPills(loans) {
 
   loans.forEach((loan) => {
     const computed = computeSchedule(loan);
-    const totals = computed.totals;
     const overdue = computed.rows.filter((row) => row.isOverdue).length;
+    const unpaidRemaining = computed.rows.reduce((sum, row) => sum + (row.paid ? 0 : row.totalDue), 0);
     const pill = document.createElement("button");
     pill.type = "button";
     pill.className = "loan-card-btn";
@@ -1083,7 +1097,7 @@ function renderLoanPills(loans) {
       <span class="loan-card-title">${loan.name}</span>
       <span class="loan-card-meta">EMI: ${formatCurrency(loan.emi, getDisplayCurrency(loan))}</span>
       <span class="loan-card-meta">Remaining: ${formatCurrency(
-        totals.remaining,
+        unpaidRemaining,
         getDisplayCurrency(loan)
       )}</span>
       <span class="loan-card-meta">Due Day: ${loan.deduction_day} | Overdue: ${overdue}</span>
