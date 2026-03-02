@@ -26,6 +26,7 @@ const detailTitle = document.getElementById("detailTitle");
 const detailMeta = document.getElementById("detailMeta");
 const detailStats = document.getElementById("detailStats");
 const editLoanBtn = document.getElementById("editLoanBtn");
+const deleteLoanBtn = document.getElementById("deleteLoanBtn");
 const editLoanPanel = document.getElementById("editLoanPanel");
 const editLoanForm = document.getElementById("editLoanForm");
 const editLoanName = document.getElementById("editLoanName");
@@ -1157,6 +1158,36 @@ async function logout() {
   showAuth();
 }
 
+async function deleteSelectedLoan() {
+  if (!currentUser || !selectedLoanId || !selectedLoanData) {
+    setAppMessage("Open a loan before deleting.");
+    return;
+  }
+
+  const loanName = selectedLoanData.name || "this loan";
+  const confirmed = window.confirm(`Delete "${loanName}" permanently? This cannot be undone.`);
+  if (!confirmed) return;
+
+  const { error } = await supabaseClient
+    .from("loans")
+    .delete()
+    .eq("id", selectedLoanId)
+    .eq("user_id", currentUser.id);
+
+  if (error) {
+    setAppMessage(error.message);
+    return;
+  }
+
+  selectedLoanId = null;
+  selectedLoanData = null;
+  closeEditPanel();
+  const loans = await getLoans();
+  refreshAllSections(loans);
+  showDashboardPage();
+  setAppMessage(`Deleted "${loanName}".`, false);
+}
+
 async function saveEditedLoan(event) {
   event.preventDefault();
   if (!currentUser || !selectedLoanId || !selectedLoanData) {
@@ -1427,6 +1458,9 @@ async function boot() {
       }
       openEditPanel(selectedLoanData);
     });
+  }
+  if (deleteLoanBtn) {
+    deleteLoanBtn.addEventListener("click", deleteSelectedLoan);
   }
   if (cancelEditLoan) {
     cancelEditLoan.addEventListener("click", () => {
