@@ -68,6 +68,7 @@ const SUPABASE_URL = window.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "";
 const DISPLAY_CURRENCY_KEY = "loanTrackerDisplayCurrency";
 const THEME_KEY = "loanTrackerTheme";
+const REQUEST_TIMEOUT_MS = 20000;
 
 let supabaseClient = null;
 let currentUser = null;
@@ -76,6 +77,7 @@ let selectedDisplayCurrency = "AUTO";
 let selectedLoanData = null;
 let cachedLoans = [];
 let dashboardRenderPromise = null;
+let loadingWatchdog = null;
 
 function parseNumber(value) {
   const number = Number(value);
@@ -137,6 +139,40 @@ function setLoading(isLoading, text = "Loading...") {
     loadingText.textContent = text;
   }
   loadingOverlay.classList.toggle("hidden", !isLoading);
+
+  if (loadingWatchdog) {
+    clearTimeout(loadingWatchdog);
+    loadingWatchdog = null;
+  }
+
+  if (isLoading) {
+    loadingWatchdog = setTimeout(() => {
+      loadingOverlay.classList.add("hidden");
+      setAppMessage("Request took too long. Please try again.", true);
+    }, REQUEST_TIMEOUT_MS + 5000);
+  }
+}
+
+function setLoanSubmitDisabled(disabled) {
+  if (!loanForm) return;
+  const submitBtn = loanForm.querySelector('button[type="submit"]');
+  if (!submitBtn) return;
+  submitBtn.disabled = !!disabled;
+  submitBtn.textContent = disabled ? "Saving..." : "Create Loan";
+}
+
+async function withTimeout(promise, timeoutMs, timeoutMessage) {
+  let timerId = null;
+  try {
+    const timeoutPromise = new Promise((_, reject) => {
+      timerId = setTimeout(() => {
+        reject(new Error(timeoutMessage));
+      }, timeoutMs);
+    });
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timerId) clearTimeout(timerId);
+  }
 }
 
 function monthLabelFromIndex(startMonth, offset) {
@@ -1133,7 +1169,11 @@ async function login(event) {
   const password = document.getElementById("loginPassword").value;
   setLoading(true, "Signing in...");
   try {
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    const { data, error } = await withTimeout(
+      supabaseClient.auth.signInWithPassword({ email, password }),
+      REQUEST_TIMEOUT_MS,
+      "Login timed out. Please check your internet/Supabase and try again."
+    );
     if (error) {
       setAuthMessage(error.message);
       return;
@@ -1143,7 +1183,13 @@ async function login(event) {
     loginForm.reset();
     selectedLoanId = null;
     setAuthMessage("");
-    await renderDashboard();
+    await withTimeout(
+      renderDashboard(),
+      REQUEST_TIMEOUT_MS,
+      "Loading dashboard timed out. Please refresh and try again."
+    );
+  } catch (error) {
+    setAuthMessage(error && error.message ? error.message : "Login failed.");
   } finally {
     setLoading(false);
   }
@@ -1343,8 +1389,13 @@ async function addLoan(event) {
   };
 
   setLoading(true, "Creating loan...");
+  setLoanSubmitDisabled(true);
   try {
-    let insertResult = await supabaseClient.from("loans").insert(payload).select("id").single();
+    let insertResult = await withTimeout(
+      supabaseClient.from("loans").insert(payload).select("id").single(),
+      REQUEST_TIMEOUT_MS,
+      "Create loan request timed out."
+    );
     const missingColsError =
       insertResult.error && typeof insertResult.error.message === "string" ? insertResult.error.message : "";
 
@@ -1367,7 +1418,11 @@ async function addLoan(event) {
         missingColsError.includes("late_fee_per_day") ||
         missingColsError.includes("grace_days")
       ) {
-        insertResult = await supabaseClient.from("loans").insert(legacyPayload).select("id").single();
+        insertResult = await withTimeout(
+          supabaseClient.from("loans").insert(legacyPayload).select("id").single(),
+          REQUEST_TIMEOUT_MS,
+          "Create loan request timed out."
+        );
       }
 
       if (
@@ -1385,7 +1440,11 @@ async function addLoan(event) {
           start_month: normalizeStartMonth(startMonthInput),
           schedule: createDefaultSchedule(durationMonths),
         };
-        insertResult = await supabaseClient.from("loans").insert(minimalPayload).select("id").single();
+        insertResult = await withTimeout(
+          supabaseClient.from("loans").insert(minimalPayload).select("id").single(),
+          REQUEST_TIMEOUT_MS,
+          "Create loan request timed out."
+        );
       }
     }
 
@@ -1399,11 +1458,22 @@ async function addLoan(event) {
       loanCurrency.value = selectedDisplayCurrency;
     }
     selectedLoanId = insertResult.data.id;
-    const loans = await getLoans();
+    const loans = await withTimeout(
+      getLoans(),
+      REQUEST_TIMEOUT_MS,
+      "Refreshing dashboard timed out after creating loan."
+    );
     refreshAllSections(loans);
-    await renderLoanDetails(insertResult.data.id);
+    await withTimeout(
+      renderLoanDetails(insertResult.data.id),
+      REQUEST_TIMEOUT_MS,
+      "Loading new loan details timed out."
+    );
     setAppMessage("Loan created and dashboard refreshed.", false);
+  } catch (error) {
+    setAppMessage(error && error.message ? error.message : "Failed to create loan.");
   } finally {
+    setLoanSubmitDisabled(false);
     setLoading(false);
   }
 }
