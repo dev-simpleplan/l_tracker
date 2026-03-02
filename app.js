@@ -18,6 +18,8 @@ const logoutBtn = document.getElementById("logoutBtn");
 const logoutBtnDetail = document.getElementById("logoutBtnDetail");
 const logoutBtnAllLoans = document.getElementById("logoutBtnAllLoans");
 const openAllLoansPage = document.getElementById("openAllLoansPage");
+const scrollToAddLoanBtn = document.getElementById("scrollToAddLoanBtn");
+const addLoanSection = document.getElementById("addLoanSection");
 const loanForm = document.getElementById("loanForm");
 const loanCurrency = document.getElementById("loanCurrency");
 const loanCalcMode = document.getElementById("loanCalcMode");
@@ -63,6 +65,11 @@ const backFromAllLoans = document.getElementById("backFromAllLoans");
 const allLoansHead = document.getElementById("allLoansHead");
 const allLoansBody = document.getElementById("allLoansBody");
 const scheduleBody = document.getElementById("scheduleBody");
+const summaryDonut = document.getElementById("summaryDonut");
+const summaryDonutText = document.getElementById("summaryDonutText");
+const summaryDonutMeta = document.getElementById("summaryDonutMeta");
+const trendModeTabs = document.getElementById("trendModeTabs");
+const trendBars = document.getElementById("trendBars");
 const loadingOverlay = document.getElementById("loadingOverlay");
 const loadingText = document.getElementById("loadingText");
 
@@ -80,6 +87,7 @@ let selectedLoanData = null;
 let cachedLoans = [];
 let dashboardRenderPromise = null;
 let loadingWatchdog = null;
+let selectedTrendMode = "due";
 
 function parseNumber(value) {
   const number = Number(value);
@@ -475,9 +483,99 @@ function refreshAllSections(loans) {
   renderAllLoansSheet(safeLoans);
   buildPortfolioStats(safeLoans);
   buildRecommendationsAndActivity(safeLoans);
+  buildVisualAnalytics(safeLoans);
   buildPenaltyTracker(safeLoans);
   populateLoanSelectors(safeLoans);
   runGoalPlanner();
+}
+
+function buildVisualAnalytics(loans) {
+  if (!summaryDonut || !summaryDonutText || !summaryDonutMeta || !trendBars) return;
+
+  if (!loans.length) {
+    summaryDonut.style.setProperty("--donut-fill", "0");
+    summaryDonutText.textContent = "0%";
+    summaryDonutMeta.textContent = "No loans yet";
+    trendBars.innerHTML = '<p class="muted">Add loans to view monthly trend.</p>';
+    return;
+  }
+
+  let paidTotal = 0;
+  let projectedTotal = 0;
+  const monthTotals = new Map();
+  const preferredCurrency = getDisplayCurrency(loans[0]);
+
+  loans.forEach((loan) => {
+    const computed = computeSchedule(loan);
+    projectedTotal += computed.totals.projectedTotal;
+
+    computed.rows.forEach((row) => {
+      if (row.paid) {
+        paidTotal += row.totalDue;
+      }
+      let monthlyValue = 0;
+      if (selectedTrendMode === "paid") {
+        monthlyValue = row.paid ? row.totalDue : 0;
+      } else if (selectedTrendMode === "extra") {
+        monthlyValue = row.extra;
+      } else {
+        monthlyValue = row.emiDue;
+      }
+
+      if (monthlyValue > 0.0001) {
+        const monthKey = monthKeyFromDate(row.dueDate);
+        monthTotals.set(monthKey, (monthTotals.get(monthKey) || 0) + monthlyValue);
+      }
+    });
+  });
+
+  const paidPct = projectedTotal > 0 ? (paidTotal / projectedTotal) * 100 : 0;
+  const safePaidPct = Math.max(0, Math.min(100, paidPct));
+  summaryDonut.style.setProperty("--donut-fill", safePaidPct.toFixed(1));
+  summaryDonutText.textContent = `${Math.round(safePaidPct)}%`;
+
+  const remainingAmount = Math.max(projectedTotal - paidTotal, 0);
+  summaryDonutMeta.textContent = `${formatCurrency(paidTotal, preferredCurrency)} paid · ${formatCurrency(
+    remainingAmount,
+    preferredCurrency
+  )} left`;
+
+  const monthlyEntries = Array.from(monthTotals.entries())
+    .sort((a, b) => monthDateFromKey(a[0]) - monthDateFromKey(b[0]))
+    .slice(-6);
+  const maxMonthly = monthlyEntries.reduce((max, [, value]) => Math.max(max, value), 0);
+
+  if (!monthlyEntries.length || maxMonthly <= 0) {
+    trendBars.innerHTML = '<p class="muted">No monthly EMI trend available yet.</p>';
+    return;
+  }
+
+  trendBars.innerHTML = "";
+  monthlyEntries.forEach(([monthKey, amount]) => {
+    const bar = document.createElement("div");
+    bar.className = "trend-bar";
+    if (selectedTrendMode === "paid") bar.classList.add("mode-paid");
+    if (selectedTrendMode === "extra") bar.classList.add("mode-extra");
+    const heightPct = Math.max((amount / maxMonthly) * 100, 18);
+    bar.style.height = `${heightPct}%`;
+    bar.title = `${longMonthLabel(monthKey)}: ${formatCurrency(amount, preferredCurrency)}`;
+
+    const label = document.createElement("span");
+    label.textContent = monthDateFromKey(monthKey).toLocaleString("en-US", { month: "short" });
+    bar.appendChild(label);
+    trendBars.appendChild(bar);
+  });
+}
+
+function setTrendMode(mode) {
+  const safeMode = mode === "paid" || mode === "extra" ? mode : "due";
+  selectedTrendMode = safeMode;
+  if (trendModeTabs) {
+    trendModeTabs.querySelectorAll(".chart-tab").forEach((button) => {
+      button.classList.toggle("active", button.dataset.mode === safeMode);
+    });
+  }
+  buildVisualAnalytics(cachedLoans);
 }
 
 function buildPortfolioStats(loans) {
@@ -1615,6 +1713,20 @@ async function boot() {
       const loans = await getLoans();
       refreshAllSections(loans);
       renderAllLoansSheet(loans);
+    });
+  }
+  if (trendModeTabs) {
+    trendModeTabs.addEventListener("click", (event) => {
+      const button = event.target.closest(".chart-tab");
+      if (!button) return;
+      setTrendMode(button.dataset.mode);
+    });
+  }
+  if (scrollToAddLoanBtn) {
+    scrollToAddLoanBtn.addEventListener("click", () => {
+      if (addLoanSection) {
+        addLoanSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     });
   }
 

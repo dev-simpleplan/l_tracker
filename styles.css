@@ -156,6 +156,19 @@ p {
   gap: 12px;
 }
 
+.full-width-card {
+  width: 100%;
+}
+
+.two-col-form {
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  column-gap: 16px;
+}
+
+.two-col-form button[type="submit"] {
+  grid-column: 1 / -1;
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -222,6 +235,17 @@ select {
   margin-bottom: 16px;
 }
 
+.dashboard-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.stack-col {
+  display: grid;
+  gap: 16px;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -276,12 +300,16 @@ select {
 }
 
 .loan-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
   gap: 10px;
 }
 
 .loan-card-btn {
+  flex: 0 0 320px;
   border: 1px solid #e6cfb5;
   background: linear-gradient(145deg, #fffaf2, #f8efdf);
   color: #3c4f53;
@@ -293,6 +321,15 @@ select {
   gap: 6px;
 }
 
+.loan-grid::-webkit-scrollbar {
+  height: 10px;
+}
+
+.loan-grid::-webkit-scrollbar-thumb {
+  background: #d8c5ab;
+  border-radius: 999px;
+}
+
 .loan-card-title {
   font-weight: 700;
   color: #2f3d5b;
@@ -301,6 +338,101 @@ select {
 .loan-card-meta {
   font-size: 0.85rem;
   color: #6f7688;
+}
+
+.visual-card {
+  background: linear-gradient(145deg, #fffdf8 0%, #f8ecdf 100%);
+}
+
+.chart-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.chart-tabs {
+  display: inline-flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.chart-tab {
+  border: 1px solid var(--border);
+  background: #fffaf2;
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.chart-tab.active {
+  border-color: #6f75f0;
+  background: #e8e4ff;
+  color: #3f4385;
+}
+
+.donut-chart {
+  --donut-fill: 30;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: conic-gradient(#6f75f0 calc(var(--donut-fill) * 1%), #e8e4ff 0);
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.donut-chart::after {
+  content: "";
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: #fffaf2;
+}
+
+.donut-chart span {
+  position: absolute;
+  font-weight: 700;
+  color: #4b4f7a;
+}
+
+.trend-bars {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  align-items: end;
+  min-height: 140px;
+  padding-top: 18px;
+}
+
+.trend-bar {
+  border-radius: 10px 10px 4px 4px;
+  background: linear-gradient(180deg, #8f93ff 0%, #6f75f0 100%);
+  min-height: 24px;
+  position: relative;
+}
+
+.trend-bar.mode-paid {
+  background: linear-gradient(180deg, #5ac8a7 0%, #2ea380 100%);
+}
+
+.trend-bar.mode-extra {
+  background: linear-gradient(180deg, #ffb38a 0%, #f08050 100%);
+}
+
+.trend-bar span {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+#runGoalPlanBtn {
+  margin-bottom: 10px;
 }
 
 .table-wrap {
@@ -510,6 +642,34 @@ tr.closed td {
   color: #b7f7f2;
 }
 
+.dark-mode .visual-card {
+  background: linear-gradient(145deg, #16243a 0%, #1a2d48 100%);
+}
+
+.dark-mode .chart-tab {
+  background: #16243a;
+  border-color: #244b7a;
+  color: #d9e5f8;
+}
+
+.dark-mode .chart-tab.active {
+  background: #243561;
+  border-color: #6f75f0;
+  color: #e3e7ff;
+}
+
+.dark-mode .donut-chart {
+  background: conic-gradient(#8f93ff calc(var(--donut-fill) * 1%), #2a3656 0);
+}
+
+.dark-mode .donut-chart::after {
+  background: #16243a;
+}
+
+.dark-mode .donut-chart span {
+  color: #d9e2ff;
+}
+
 .dark-mode .table-wrap {
   background: #0f1a2c;
 }
@@ -542,6 +702,14 @@ tr.closed td {
   .detail-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .dashboard-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .two-col-form {
+    grid-template-columns: 1fr;
   }
 
   .currency-controls {

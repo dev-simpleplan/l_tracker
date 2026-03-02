@@ -101,41 +101,70 @@
             </div>
             <div class="detail-actions">
               <button id="openAllLoansPage" class="btn" type="button">All Loans Sheet</button>
+              <button id="scrollToAddLoanBtn" class="btn" type="button">Add New Loan</button>
               <button id="logoutBtn" class="btn" type="button">Logout</button>
             </div>
           </header>
           <p id="appMessage" class="message app-message"></p>
-          <section class="grid insights-grid">
-            <article class="card">
-              <h3>Portfolio Insights</h3>
-              <div id="portfolioStats" class="stats-grid"></div>
-            </article>
-            <article class="card">
-              <h3>Due Reminders</h3>
-              <ul id="dueList" class="due-list"></ul>
-            </article>
+          <section class="dashboard-columns insights-grid">
+            <div class="stack-col">
+              <article class="card">
+                <h3>Portfolio Insights</h3>
+                <div id="portfolioStats" class="stats-grid"></div>
+              </article>
+              <article class="card">
+                <h3>Smart Recommendations</h3>
+                <ul id="recommendationList" class="due-list"></ul>
+              </article>
+            </div>
+            <div class="stack-col">
+              <article class="card">
+                <h3>Due Reminders</h3>
+                <ul id="dueList" class="due-list"></ul>
+              </article>
+              <article class="card">
+                <h3>Recent Activity</h3>
+                <ul id="activityList" class="due-list"></ul>
+              </article>
+            </div>
           </section>
-          <section class="grid insights-grid">
-            <article class="card">
-              <h3>Smart Recommendations</h3>
-              <ul id="recommendationList" class="due-list"></ul>
+
+          <section class="dashboard-columns insights-grid">
+            <article class="card visual-card">
+              <h3>Visual Analytics</h3>
+              <div class="chart-wrap">
+                <div class="donut-chart" id="summaryDonut">
+                  <span id="summaryDonutText">0%</span>
+                </div>
+                <div>
+                  <p class="muted">Paid vs Remaining</p>
+                  <p id="summaryDonutMeta"></p>
+                </div>
+              </div>
             </article>
-            <article class="card">
-              <h3>Recent Activity</h3>
-              <ul id="activityList" class="due-list"></ul>
+            <article class="card visual-card">
+              <h3>Monthly Trend</h3>
+              <div class="chart-tabs" id="trendModeTabs">
+                <button class="chart-tab active" type="button" data-mode="due">Due</button>
+                <button class="chart-tab" type="button" data-mode="paid">Paid</button>
+                <button class="chart-tab" type="button" data-mode="extra">Extra</button>
+              </div>
+              <div id="trendBars" class="trend-bars"></div>
             </article>
           </section>
 
-          <section class="grid">
+          <section class="grid insights-grid">
             <article class="card">
               <h3>All Loans</h3>
               <p class="muted">Click a loan card to open full month-wise details.</p>
               <div id="loanPills" class="loan-grid"></div>
             </article>
+          </section>
 
-            <article class="card">
+          <section class="insights-grid">
+            <article class="card full-width-card" id="addLoanSection">
               <h3>Add New Loan</h3>
-              <form id="loanForm" class="form">
+              <form id="loanForm" class="form two-col-form">
                 <label>
                   Loan Name
                   <input type="text" id="loanName" required placeholder="Home Loan" />
