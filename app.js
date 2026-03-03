@@ -231,7 +231,13 @@ function normalizeStartMonth(monthValue) {
 }
 
 function createDefaultSchedule(durationMonths) {
-  return Array.from({ length: durationMonths }, () => ({ paid: false, extra: 0 }));
+  return Array.from({ length: durationMonths }, () => ({ paid: false, extra: 0, paid_on: null }));
+}
+
+function normalizeDateInput(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
 }
 
 function normalizeLoan(loan) {
@@ -242,6 +248,7 @@ function normalizeLoan(loan) {
     return {
       paid: !!row.paid,
       extra: Math.max(parseNumber(row.extra), 0),
+      paid_on: normalizeDateInput(row.paid_on),
     };
   });
 
@@ -267,7 +274,7 @@ function buildBaseRows(loan) {
   const monthlyRate = loan.annual_rate / 1200;
 
   for (let i = 0; i < loan.duration_months; i += 1) {
-    const monthData = loan.schedule[i] || { paid: false, extra: 0 };
+    const monthData = loan.schedule[i] || { paid: false, extra: 0, paid_on: null };
     const dueDate = dueDateForIndex(loan.start_month, i, loan.deduction_day);
     const monthName = monthLabelFromIndex(loan.start_month, i);
 
@@ -290,6 +297,7 @@ function buildBaseRows(loan) {
       emiDue: plannedEmi,
       extra: Math.max(parseNumber(monthData.extra), 0),
       paid: !!monthData.paid,
+      paidOn: normalizeDateInput(monthData.paid_on),
       remaining: 0,
       totalDue: 0,
       isClosed: false,
@@ -360,9 +368,15 @@ function finalizeRows(rows, loan) {
     const isClosed = row.emiDue <= 0.0001;
     const graceDate = new Date(row.dueDate);
     graceDate.setDate(graceDate.getDate() + loan.grace_days);
+    const paidDate = row.paidOn ? new Date(`${row.paidOn}T00:00:00`) : null;
+    const isPaidLate = !!(row.paid && paidDate && paidDate > graceDate);
     const isOverdue = !row.paid && !isClosed && today > graceDate;
-    const overdueDays = isOverdue
-      ? Math.max(Math.floor((today.getTime() - graceDate.getTime()) / (1000 * 60 * 60 * 24)), 0)
+    const overdueReferenceDate = isOverdue ? today : isPaidLate ? paidDate : null;
+    const overdueDays = overdueReferenceDate
+      ? Math.max(
+          Math.floor((overdueReferenceDate.getTime() - graceDate.getTime()) / (1000 * 60 * 60 * 24)),
+          0
+        )
       : 0;
     const penaltyAccrued = overdueDays * loan.late_fee_per_day;
     return {
@@ -374,6 +388,7 @@ function finalizeRows(rows, loan) {
       remaining: loan.calc_mode === "calculated" ? remainingPrincipal : trackingRemaining,
       isClosed,
       isOverdue,
+      isPaidLate,
       overdueDays,
       penaltyAccrued,
     };
@@ -439,6 +454,7 @@ function normalizeScheduleForDuration(schedule, durationMonths) {
     return {
       paid: !!row.paid,
       extra: Math.max(parseNumber(row.extra), 0),
+      paid_on: normalizeDateInput(row.paid_on),
     };
   });
 }
@@ -604,7 +620,8 @@ function buildPortfolioStats(loans) {
   let paidInterest = 0;
   let paidPrincipal = 0;
   let usedExtra = 0;
-  let remaining = 0;
+  let outstandingPrincipal = 0;
+  let outstandingDue = 0;
   let overdueCount = 0;
   let dueCount = 0;
   let paidCount = 0;
@@ -619,8 +636,16 @@ function buildPortfolioStats(loans) {
     paidInterest += computed.totals.paidInterest;
     paidPrincipal += computed.totals.paidPrincipal;
     usedExtra += computed.totals.usedExtra;
-    remaining += computed.totals.remaining;
     overdueCount += computed.totals.overdueCount;
+    if (loan.calc_mode === "calculated") {
+      outstandingPrincipal += computed.rows.reduce(
+        (sum, row) => sum + (row.paid ? 0 : row.principalDue),
+        0
+      );
+    } else {
+      outstandingPrincipal += computed.rows.reduce((sum, row) => sum + (row.paid ? 0 : row.emiDue), 0);
+    }
+    outstandingDue += computed.rows.reduce((sum, row) => sum + (row.paid ? 0 : row.totalDue), 0);
 
     computed.rows.forEach((row) => {
       if (row.emiDue > 0.0001 && row.dueDate <= today) {
@@ -643,7 +668,11 @@ function buildPortfolioStats(loans) {
 
   renderStats(portfolioStats, [
     { label: "Total Loans", value: String(loans.length) },
-    { label: "Outstanding Principal", value: formatCurrency(remaining, getDisplayCurrency(loans[0])) },
+    {
+      label: "Outstanding Principal",
+      value: formatCurrency(outstandingPrincipal, getDisplayCurrency(loans[0])),
+    },
+    { label: "Outstanding Due", value: formatCurrency(outstandingDue, getDisplayCurrency(loans[0])) },
     { label: "Projected Interest", value: formatCurrency(projectedInterest, getDisplayCurrency(loans[0])) },
     { label: "Interest Paid", value: formatCurrency(paidInterest, getDisplayCurrency(loans[0])) },
     { label: "Principal Paid", value: formatCurrency(paidPrincipal, getDisplayCurrency(loans[0])) },
@@ -794,15 +823,19 @@ function buildPenaltyTracker(loans) {
   loans.forEach((loan) => {
     const computed = computeSchedule(loan);
     computed.rows.forEach((row) => {
-      if (row.isOverdue && row.penaltyAccrued > 0) {
+      if (row.penaltyAccrued > 0) {
         totalAccrued += row.penaltyAccrued;
-        const projected = loan.late_fee_per_day * 30;
+        const projected = row.isOverdue ? loan.late_fee_per_day * 30 : 0;
         potentialNext30 += projected;
         logs.push(
-          `${loan.name} - ${row.monthName}: ${row.overdueDays} overdue day(s), accrued ${formatCurrency(
+          `${loan.name} - ${row.monthName}: ${row.overdueDays} late day(s), accrued ${formatCurrency(
             row.penaltyAccrued,
             getDisplayCurrency(loan)
-          )}, avoid ${formatCurrency(projected, getDisplayCurrency(loan))} by paying now.`
+          )}${
+            row.isOverdue
+              ? `, avoid ${formatCurrency(projected, getDisplayCurrency(loan))} by paying now.`
+              : " (paid late)."
+          }`
         );
       }
     });
@@ -842,11 +875,20 @@ function loanRowsToCsv(loan) {
     "Principal",
     "Extra",
     "Status",
+    "Paid On",
     "Remaining",
   ];
   const lines = [headers.join(",")];
   computed.rows.forEach((row) => {
-    const status = row.paid ? "Paid" : row.isClosed ? "Closed" : row.isOverdue ? "Overdue" : "Pending";
+    const status = row.paid
+      ? row.isPaidLate
+        ? "Paid Late"
+        : "Paid"
+      : row.isClosed
+      ? "Closed"
+      : row.isOverdue
+      ? "Overdue"
+      : "Pending";
     lines.push(
       [
         `"${loan.name}"`,
@@ -857,6 +899,7 @@ function loanRowsToCsv(loan) {
         row.principalDue.toFixed(2),
         row.extra.toFixed(2),
         status,
+        row.paidOn || "",
         row.remaining.toFixed(2),
       ].join(",")
     );
@@ -1232,7 +1275,15 @@ async function renderLoanDetails(loanId) {
     else if (row.isClosed) tr.classList.add("closed");
     else if (row.isOverdue) tr.classList.add("overdue");
 
-    const status = row.paid ? "Paid" : row.isClosed ? "Closed" : row.isOverdue ? "Overdue" : "Pending";
+    const status = row.paid
+      ? row.isPaidLate
+        ? "Paid Late"
+        : "Paid"
+      : row.isClosed
+      ? "Closed"
+      : row.isOverdue
+      ? "Overdue"
+      : "Pending";
 
     tr.innerHTML = `
       <td>${row.monthName}</td>
@@ -1248,6 +1299,9 @@ async function renderLoanDetails(loanId) {
       <td>${formatCurrency(row.totalDue, getDisplayCurrency(loan))}</td>
       <td>${status}</td>
       <td>${formatCurrency(row.remaining, getDisplayCurrency(loan))}</td>
+      <td>
+        <input type="date" data-action="paid_on" data-index="${row.index}" value="${row.paidOn || ""}" />
+      </td>
       <td>
         <input type="checkbox" data-action="paid" data-index="${row.index}" ${
       row.paid ? "checked" : ""
@@ -1574,15 +1628,28 @@ async function updateLoanSchedule(loanId, rowIndex, type, value) {
   const schedule = normalized.schedule;
 
   if (!schedule[rowIndex]) {
-    schedule[rowIndex] = { paid: false, extra: 0 };
+    schedule[rowIndex] = { paid: false, extra: 0, paid_on: null };
   }
 
   if (type === "paid") {
     schedule[rowIndex].paid = value;
+    if (value && !schedule[rowIndex].paid_on) {
+      schedule[rowIndex].paid_on = new Date().toISOString().slice(0, 10);
+    }
+    if (!value) {
+      schedule[rowIndex].paid_on = null;
+    }
   }
 
   if (type === "extra") {
     schedule[rowIndex].extra = Math.max(parseNumber(value), 0);
+  }
+
+  if (type === "paid_on") {
+    schedule[rowIndex].paid_on = normalizeDateInput(value);
+    if (schedule[rowIndex].paid_on && !schedule[rowIndex].paid) {
+      schedule[rowIndex].paid = true;
+    }
   }
 
   const { error: updateError } = await supabaseClient
@@ -1767,6 +1834,10 @@ async function boot() {
 
     if (action === "extra") {
       await updateLoanSchedule(selectedLoanId, index, "extra", target.value);
+    }
+
+    if (action === "paid_on") {
+      await updateLoanSchedule(selectedLoanId, index, "paid_on", target.value);
     }
   });
 
