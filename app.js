@@ -89,6 +89,7 @@ let cachedLoans = [];
 let dashboardRenderPromise = null;
 let loadingWatchdog = null;
 let selectedTrendMode = "due";
+let isCreatingLoan = false;
 
 function parseNumber(value) {
   const number = Number(value);
@@ -1472,6 +1473,7 @@ async function saveEditedLoan(event) {
 
 async function addLoan(event) {
   event.preventDefault();
+  if (isCreatingLoan) return;
   const name = document.getElementById("loanName").value.trim();
   const amount = Math.max(parseNumber(document.getElementById("loanAmount").value), 0);
   const durationMonths = Math.max(parseInt(document.getElementById("loanDuration").value, 10) || 0, 1);
@@ -1517,6 +1519,7 @@ async function addLoan(event) {
 
   setLoading(true, "Creating loan...");
   setLoanSubmitDisabled(true);
+  isCreatingLoan = true;
   try {
     const insertResult = await withTimeout(
       insertLoanAdaptive(payload),
@@ -1536,22 +1539,19 @@ async function addLoan(event) {
     if (loanCurrency && selectedDisplayCurrency !== "AUTO") {
       loanCurrency.value = selectedDisplayCurrency;
     }
-    selectedLoanId = insertResult.data.id;
+    selectedLoanId = insertResult.data ? insertResult.data.id : null;
     const loans = await withTimeout(
       getLoans(),
       REQUEST_TIMEOUT_MS,
       "Refreshing dashboard timed out after creating loan."
     );
     refreshAllSections(loans);
-    await withTimeout(
-      renderLoanDetails(insertResult.data.id),
-      REQUEST_TIMEOUT_MS,
-      "Loading new loan details timed out."
-    );
+    showDashboardPage();
     setAppMessage("Loan created and dashboard refreshed.", false);
   } catch (error) {
     setAppMessage(error && error.message ? error.message : "Failed to create loan.");
   } finally {
+    isCreatingLoan = false;
     setLoanSubmitDisabled(false);
     setLoading(false);
   }
