@@ -51,6 +51,7 @@ const recommendationList = document.getElementById("recommendationList");
 const activityList = document.getElementById("activityList");
 const goalLoanSelect = document.getElementById("goalLoanSelect");
 const goalExtraInput = document.getElementById("goalExtraInput");
+const goalApplyFrom = document.getElementById("goalApplyFrom");
 const runGoalPlanBtn = document.getElementById("runGoalPlanBtn");
 const goalPlanResult = document.getElementById("goalPlanResult");
 const penaltyStats = document.getElementById("penaltyStats");
@@ -325,10 +326,21 @@ function buildBaseRows(loan) {
   return rows;
 }
 
-function applyTailExtraReduction(rows, plannerMonthlyExtra = 0) {
+function applyTailExtraReduction(rows, plannerMonthlyExtra = 0, plannerApplyFrom = "start") {
   const adjusted = rows.map((row) => ({ ...row }));
   const extraPoolFromRows = adjusted.reduce((sum, row) => sum + row.extra, 0);
-  const plannerExtraPool = Math.max(parseNumber(plannerMonthlyExtra), 0) * adjusted.length;
+  const plannerExtraValue = Math.max(parseNumber(plannerMonthlyExtra), 0);
+  const currentMonthStart = new Date();
+  currentMonthStart.setDate(1);
+  currentMonthStart.setHours(0, 0, 0, 0);
+  const eligiblePlannerMonths = adjusted.filter((row) => {
+    if (row.emiDue <= 0.0001) return false;
+    if (plannerApplyFrom === "current") {
+      return !row.paid && row.dueDate >= currentMonthStart;
+    }
+    return true;
+  }).length;
+  const plannerExtraPool = plannerExtraValue * eligiblePlannerMonths;
   let extraPool = extraPoolFromRows + plannerExtraPool;
 
   for (let i = adjusted.length - 1; i >= 0 && extraPool > 0; i -= 1) {
@@ -427,11 +439,11 @@ function summarizeRows(rows, loan, usedExtra, baselineInterest) {
   };
 }
 
-function computeSchedule(loanInput, plannerMonthlyExtra = 0) {
+function computeSchedule(loanInput, plannerMonthlyExtra = 0, plannerApplyFrom = "start") {
   const loan = normalizeLoan(loanInput);
   const baseRows = buildBaseRows(loan);
   const baselineInterest = baseRows.reduce((sum, row) => sum + row.interestDue, 0);
-  const extraAdjusted = applyTailExtraReduction(baseRows, plannerMonthlyExtra);
+  const extraAdjusted = applyTailExtraReduction(baseRows, plannerMonthlyExtra, plannerApplyFrom);
   const finalRows = finalizeRows(extraAdjusted.rows, loan);
   const totals = summarizeRows(finalRows, loan, extraAdjusted.usedExtra, baselineInterest);
 
@@ -784,8 +796,9 @@ function runGoalPlanner() {
   }
 
   const monthlyExtra = Math.max(parseNumber(goalExtraInput ? goalExtraInput.value : 0), 0);
+  const plannerApplyFromMode = goalApplyFrom ? goalApplyFrom.value : "current";
   const base = computeSchedule(loan, 0);
-  const planned = computeSchedule(loan, monthlyExtra);
+  const planned = computeSchedule(loan, monthlyExtra, plannerApplyFromMode);
   const activeRows = planned.rows.filter((row) => row.emiDue > 0.0001);
   const closeDate = activeRows.length
     ? activeRows[activeRows.length - 1].dueDate.toLocaleDateString("en-US")
@@ -804,6 +817,10 @@ function runGoalPlanner() {
     {
       label: "Projected Total",
       value: formatCurrency(planned.totals.projectedTotal, getDisplayCurrency(loan)),
+    },
+    {
+      label: "Planner Scope",
+      value: plannerApplyFromMode === "current" ? "Current month onward" : "Loan start",
     },
   ]);
 }
@@ -1714,6 +1731,11 @@ async function boot() {
   }
   if (goalLoanSelect) {
     goalLoanSelect.addEventListener("change", () => {
+      runGoalPlanner();
+    });
+  }
+  if (goalApplyFrom) {
+    goalApplyFrom.addEventListener("change", () => {
       runGoalPlanner();
     });
   }

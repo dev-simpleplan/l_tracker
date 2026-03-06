@@ -239,6 +239,13 @@
                   Extra Amount per Month
                   <input id="goalExtraInput" type="number" min="0" value="0" />
                 </label>
+                <label>
+                  Apply Extra From
+                  <select id="goalApplyFrom">
+                    <option value="current">Current month onward (ignore paid months)</option>
+                    <option value="start">Loan start (all months)</option>
+                  </select>
+                </label>
                 <button id="runGoalPlanBtn" class="btn primary" type="button">Run Plan</button>
               </div>
               <div id="goalPlanResult" class="stats-grid detail-stats"></div>
