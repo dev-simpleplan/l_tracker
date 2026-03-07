@@ -24,6 +24,24 @@ module.exports = async function handler(req, res) {
       `User question: ${safeQuestion}`,
     ].join("\n");
 
+    function collectTextParts(value, bucket) {
+      if (!value) return;
+      if (Array.isArray(value)) {
+        value.forEach((item) => collectTextParts(item, bucket));
+        return;
+      }
+      if (typeof value === "object") {
+        Object.keys(value).forEach((key) => {
+          const item = value[key];
+          if (key === "text" && typeof item === "string" && item.trim()) {
+            bucket.push(item.trim());
+            return;
+          }
+          collectTextParts(item, bucket);
+        });
+      }
+    }
+
     const preferredModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     const modelCandidates = [preferredModel, "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"].filter(
       (model, index, arr) => model && arr.indexOf(model) === index
@@ -46,7 +64,8 @@ module.exports = async function handler(req, res) {
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
               temperature: 0.4,
-              maxOutputTokens: 260,
+              maxOutputTokens: 512,
+              responseMimeType: "text/plain",
             },
           }),
         }
@@ -66,18 +85,9 @@ module.exports = async function handler(req, res) {
     }
 
     const payload = await geminiResponse.json();
-    const parts =
-      payload &&
-      payload.candidates &&
-      payload.candidates[0] &&
-      payload.candidates[0].content &&
-      Array.isArray(payload.candidates[0].content.parts)
-        ? payload.candidates[0].content.parts
-        : [];
-    const responseText = parts
-      .map((part) => (part && typeof part.text === "string" ? part.text : ""))
-      .join("\n")
-      .trim();
+    const textBucket = [];
+    collectTextParts(payload, textBucket);
+    const responseText = textBucket.join("\n").trim();
     if (!responseText) {
       res.status(502).json({ error: "Gemini returned empty response" });
       return;
