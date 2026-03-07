@@ -24,8 +24,8 @@ module.exports = async function handler(req, res) {
       `User question: ${safeQuestion}`,
     ].join("\n");
 
-    const preferredModel = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-    const modelCandidates = [preferredModel, "gemini-2.0-flash", "gemini-1.5-flash"].filter(
+    const preferredModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const modelCandidates = [preferredModel, "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"].filter(
       (model, index, arr) => model && arr.indexOf(model) === index
     );
 
