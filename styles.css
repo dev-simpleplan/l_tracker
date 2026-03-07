@@ -423,6 +423,77 @@ select:focus,
   margin: 0;
 }
 
+.badge-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.reward-badge {
+  border: 1px solid rgba(122, 147, 210, 0.35);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(236, 243, 255, 0.74));
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.75), 0 6px 14px rgba(44, 65, 132, 0.15);
+}
+
+.reward-badge.earned {
+  border-color: rgba(91, 114, 255, 0.45);
+  box-shadow: var(--glow-primary), 0 6px 14px rgba(44, 65, 132, 0.15);
+}
+
+.reward-badge.locked {
+  opacity: 0.82;
+}
+
+.copilot-output {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  min-height: 112px;
+  white-space: pre-line;
+  line-height: 1.45;
+  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
+}
+
+.document-vault {
+  margin-bottom: 12px;
+}
+
+.vault-form {
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+}
+
+.vault-form button[type="button"] {
+  grid-column: 1 / -1;
+}
+
+.vault-list {
+  list-style: none;
+  padding: 0;
+  margin-top: 10px;
+}
+
+.vault-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--surface-2) 84%, transparent);
+  margin-bottom: 8px;
+}
+
+.vault-meta,
+.vault-note {
+  margin: 4px 0 0;
+}
+
 .export-layout {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) minmax(280px, 1fr);
@@ -983,6 +1054,24 @@ tr.closed td {
   border-color: rgba(255, 255, 255, 0.35);
 }
 
+.dark-mode .copilot-output,
+.dark-mode .vault-item {
+  background: rgba(26, 26, 26, 0.9);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark-mode .reward-badge {
+  background: linear-gradient(145deg, rgba(48, 48, 48, 0.95), rgba(30, 30, 30, 0.92));
+  color: #efefef;
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.dark-mode .reward-badge.earned {
+  color: #111111;
+  background: linear-gradient(145deg, rgba(245, 245, 245, 0.96), rgba(218, 218, 218, 0.92));
+}
+
 .dark-mode .tab.active,
 .dark-mode .chart-tab.active,
 .dark-mode .btn.primary,
@@ -1109,6 +1198,14 @@ tr.closed td {
 
   .export-layout {
     grid-template-columns: 1fr;
+  }
+
+  .vault-form {
+    grid-template-columns: 1fr;
+  }
+
+  .vault-item {
+    flex-direction: column;
   }
 
   .chart-wrap {

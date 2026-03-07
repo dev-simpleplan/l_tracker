@@ -15,8 +15,6 @@ const dashboardSection = document.getElementById("dashboardSection");
 const detailPage = document.getElementById("detailPage");
 const allLoansPage = document.getElementById("allLoansPage");
 const logoutBtn = document.getElementById("logoutBtn");
-const logoutBtnDetail = document.getElementById("logoutBtnDetail");
-const logoutBtnAllLoans = document.getElementById("logoutBtnAllLoans");
 const openAllLoansPage = document.getElementById("openAllLoansPage");
 const scrollToAddLoanBtn = document.getElementById("scrollToAddLoanBtn");
 const addLoanSection = document.getElementById("addLoanSection");
@@ -61,6 +59,19 @@ const exportLoanCsvBtn = document.getElementById("exportLoanCsvBtn");
 const exportLoanPdfBtn = document.getElementById("exportLoanPdfBtn");
 const exportPortfolioCsvBtn = document.getElementById("exportPortfolioCsvBtn");
 const exportPortfolioPdfBtn = document.getElementById("exportPortfolioPdfBtn");
+const rewardStats = document.getElementById("rewardStats");
+const rewardBadges = document.getElementById("rewardBadges");
+const copilotInput = document.getElementById("copilotInput");
+const askCopilotBtn = document.getElementById("askCopilotBtn");
+const copilotFocusHighestBtn = document.getElementById("copilotFocusHighestBtn");
+const copilotPenaltyPlanBtn = document.getElementById("copilotPenaltyPlanBtn");
+const copilotOutput = document.getElementById("copilotOutput");
+const vaultDocTitle = document.getElementById("vaultDocTitle");
+const vaultDocType = document.getElementById("vaultDocType");
+const vaultDocFile = document.getElementById("vaultDocFile");
+const vaultDocNote = document.getElementById("vaultDocNote");
+const addVaultDocBtn = document.getElementById("addVaultDocBtn");
+const vaultDocList = document.getElementById("vaultDocList");
 const backToDashboard = document.getElementById("backToDashboard");
 const backFromAllLoans = document.getElementById("backFromAllLoans");
 const allLoansHead = document.getElementById("allLoansHead");
@@ -78,6 +89,9 @@ const SUPABASE_URL = window.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "";
 const DISPLAY_CURRENCY_KEY = "loanTrackerDisplayCurrency";
 const THEME_KEY = "loanTrackerTheme";
+const VAULT_STORAGE_KEY = "loanTrackerVaultDocs";
+const COPILOT_API_URL = "/api/copilot";
+const COPILOT_ONLINE_TIMEOUT_MS = 12000;
 const REQUEST_TIMEOUT_MS = 20000;
 const ROUNDING_RESIDUAL_LIMIT = 10;
 
@@ -159,6 +173,33 @@ function applyTheme(theme) {
 
 function saveTheme(theme) {
   localStorage.setItem(THEME_KEY, theme);
+}
+
+function getUserScopedStorageKey(baseKey) {
+  const userId = currentUser && currentUser.id ? currentUser.id : "guest";
+  return `${baseKey}:${userId}`;
+}
+
+function loadVaultStore() {
+  try {
+    const raw = localStorage.getItem(getUserScopedStorageKey(VAULT_STORAGE_KEY));
+    return raw ? JSON.parse(raw) : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function saveVaultStore(store) {
+  localStorage.setItem(getUserScopedStorageKey(VAULT_STORAGE_KEY), JSON.stringify(store || {}));
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function setLoading(isLoading, text = "Loading...") {
@@ -540,6 +581,7 @@ function refreshAllSections(loans) {
   renderLoanPills(safeLoans);
   renderAllLoansSheet(safeLoans);
   buildPortfolioStats(safeLoans);
+  buildRewards(safeLoans);
   buildRecommendationsAndActivity(safeLoans);
   buildVisualAnalytics(safeLoans);
   buildPenaltyTracker(safeLoans);
@@ -848,6 +890,346 @@ function runGoalPlanner() {
       value: plannerApplyFromMode === "current" ? "Current month onward" : "Loan start",
     },
   ]);
+}
+
+function buildRewards(loans) {
+  if (!rewardStats || !rewardBadges) return;
+  if (!loans.length) {
+    renderStats(rewardStats, [
+      { label: "Reward Points", value: "0" },
+      { label: "Current Streak", value: "0 months" },
+      { label: "On-time %", value: "0.00%" },
+    ]);
+    rewardBadges.innerHTML = '<button class="reward-badge locked" type="button">Add loans to unlock badges</button>';
+    return;
+  }
+
+  let totalPaid = 0;
+  let onTimePaid = 0;
+  let latePaid = 0;
+  let extraPaidMonths = 0;
+  let overdueOpen = 0;
+  let longestStreak = 0;
+  let currentStreak = 0;
+  let monthsReduced = 0;
+  let fullyClosed = 0;
+
+  loans.forEach((loan) => {
+    const computed = computeSchedule(loan);
+    const activeRows = computed.rows.filter((row) => row.emiDue > 0.0001);
+    monthsReduced += computed.totals.monthsReduced;
+    if (activeRows.length && activeRows.every((row) => row.paid)) {
+      fullyClosed += 1;
+    }
+
+    let run = 0;
+    activeRows.forEach((row) => {
+      if (row.paid) {
+        totalPaid += 1;
+        if (row.isPaidLate) {
+          latePaid += 1;
+          run = 0;
+        } else {
+          onTimePaid += 1;
+          run += 1;
+          if (run > longestStreak) longestStreak = run;
+        }
+        if (row.extra > 0.0001) extraPaidMonths += 1;
+      } else {
+        if (row.isOverdue) overdueOpen += 1;
+        run = 0;
+      }
+    });
+
+    let trailing = 0;
+    for (let i = activeRows.length - 1; i >= 0; i -= 1) {
+      const row = activeRows[i];
+      if (row.paid && !row.isPaidLate) {
+        trailing += 1;
+      } else {
+        break;
+      }
+    }
+    if (trailing > currentStreak) currentStreak = trailing;
+  });
+
+  const onTimeRate = totalPaid > 0 ? (onTimePaid / totalPaid) * 100 : 100;
+  const points = Math.max(
+    Math.round(onTimePaid * 20 + extraPaidMonths * 8 + monthsReduced * 18 + fullyClosed * 45 - latePaid * 6),
+    0
+  );
+
+  renderStats(rewardStats, [
+    { label: "Reward Points", value: String(points) },
+    { label: "Current Streak", value: `${currentStreak} month${currentStreak === 1 ? "" : "s"}` },
+    { label: "Longest Streak", value: `${longestStreak} months` },
+    { label: "On-time %", value: percent(onTimeRate) },
+    { label: "Extra-Pay Months", value: String(extraPaidMonths) },
+    { label: "Penalty-Free Loans", value: String(Math.max(loans.length - overdueOpen, 0)) },
+  ]);
+
+  const badges = [
+    {
+      title: "On-Time Titan",
+      earned: onTimeRate >= 95 && totalPaid >= 6,
+      rule: "95%+ on-time across 6+ paid EMIs",
+    },
+    {
+      title: "Prepay Pro",
+      earned: monthsReduced >= 2 || extraPaidMonths >= 4,
+      rule: "Save 2+ months or 4+ extra-payment months",
+    },
+    {
+      title: "Penalty Shield",
+      earned: overdueOpen === 0 && totalPaid >= 3,
+      rule: "No open overdue EMIs",
+    },
+    {
+      title: "Closure Club",
+      earned: fullyClosed >= 1,
+      rule: "Close at least 1 loan",
+    },
+  ];
+
+  rewardBadges.innerHTML = badges
+    .map(
+      (badge) =>
+        `<button class="reward-badge ${badge.earned ? "earned" : "locked"}" type="button" title="${escapeHtml(
+          badge.rule
+        )}">${badge.earned ? "★" : "○"} ${escapeHtml(badge.title)}</button>`
+    )
+    .join("");
+}
+
+function buildCopilotAdvice(query, loans) {
+  if (!loans.length) {
+    return "Add at least one loan, then ask Copilot for a payoff strategy.";
+  }
+
+  const normalized = (query || "").toLowerCase();
+  const computed = loans.map((loan) => ({ loan, data: computeSchedule(loan) }));
+  const highestAprItem = computed.reduce((best, item) => {
+    if (!best || item.loan.annual_rate > best.loan.annual_rate) return item;
+    return best;
+  }, null);
+  const highestOverdueItem = computed.reduce((best, item) => {
+    if (!best || item.data.totals.overdueCount > best.data.totals.overdueCount) return item;
+    return best;
+  }, null);
+
+  const highestAprLoan = highestAprItem && highestAprItem.loan;
+  const highestOverdueLoan = highestOverdueItem && highestOverdueItem.loan;
+
+  if (normalized.includes("penalty") || normalized.includes("late") || normalized.includes("overdue")) {
+    if (!highestOverdueItem || highestOverdueItem.data.totals.overdueCount === 0) {
+      return "Penalty Rescue: No overdue EMIs right now. Keep reminders enabled and pay before due day.";
+    }
+    const monthlyBuffer = Math.max(Math.round(highestOverdueLoan.emi * 0.15), 500);
+    return [
+      `Penalty Rescue Plan for ${highestOverdueLoan.name}:`,
+      `1. Clear the next overdue EMI first to stop daily late fee accrual.`,
+      `2. Keep a safety buffer of ${formatCurrency(monthlyBuffer, getDisplayCurrency(highestOverdueLoan))} every month.`,
+      `3. Set payment target to due day minus 3 days for this loan.`,
+    ].join("\n");
+  }
+
+  if (normalized.includes("highest") || normalized.includes("apr") || normalized.includes("interest")) {
+    if (!highestAprLoan) return "No APR data found yet.";
+    const suggestedExtra = Math.max(Math.round(highestAprLoan.emi * 0.2), 1000);
+    return [
+      `Highest APR focus: ${highestAprLoan.name} at ${percent(highestAprLoan.annual_rate)} APR.`,
+      `1. Add ${formatCurrency(suggestedExtra, getDisplayCurrency(highestAprLoan))} extra monthly toward this loan.`,
+      `2. Keep others at minimum EMI, then redirect freed cash after closure.`,
+      `3. Recheck after 3 payments and increase extra by 10% if affordable.`,
+    ].join("\n");
+  }
+
+  const totalOutstanding = computed.reduce(
+    (sum, item) => sum + item.data.rows.reduce((inner, row) => inner + (row.paid ? 0 : row.totalDue), 0),
+    0
+  );
+  const suggestedGlobalExtra = Math.max(Math.round(totalOutstanding * 0.02), 1500);
+  return [
+    "Copilot Strategy:",
+    "1. Prioritize highest APR loan for all extra payments.",
+    "2. Clear overdue EMIs before adding new extras.",
+    `3. Aim for a monthly extra of at least ${formatCurrency(suggestedGlobalExtra, getDisplayCurrency(loans[0]))}.`,
+    "4. Keep current streak unbroken to maximize rewards.",
+  ].join("\n");
+}
+
+function summarizePortfolioForCopilot(loans) {
+  if (!loans.length) return "No loans added yet.";
+  const lines = loans.map((loan) => {
+    const computed = computeSchedule(loan);
+    const overdue = computed.totals.overdueCount;
+    const remaining = computed.rows.reduce((sum, row) => sum + (row.paid ? 0 : row.totalDue), 0);
+    return `${loan.name}: APR ${loan.annual_rate}%, EMI ${loan.emi}, Remaining ${Math.round(
+      remaining
+    )}, Overdue ${overdue}`;
+  });
+  return lines.join(" | ");
+}
+
+async function getOnlineCopilotAdvice(queryText, loans) {
+  const summary = summarizePortfolioForCopilot(loans);
+  const question = queryText || "Give best next steps to reduce interest and penalties.";
+
+  const response = await withTimeout(
+    fetch(COPILOT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question,
+        portfolioSummary: summary,
+      }),
+    }),
+    COPILOT_ONLINE_TIMEOUT_MS,
+    "Copilot request timed out"
+  );
+  if (!response.ok) {
+    throw new Error("Copilot API unavailable");
+  }
+  const payload = await response.json();
+  const text = (payload && payload.response ? String(payload.response) : "").trim();
+  if (!text || text.length < 4) {
+    throw new Error("Empty response from Copilot API");
+  }
+  return text;
+}
+
+async function runCopilot(queryText) {
+  if (!copilotOutput) return;
+  copilotOutput.textContent = "Thinking...";
+  try {
+    const answer = await getOnlineCopilotAdvice(queryText, cachedLoans);
+    copilotOutput.textContent = answer;
+  } catch (_error) {
+    const fallback = buildCopilotAdvice(queryText, cachedLoans);
+    copilotOutput.textContent = `${fallback}\n\n(Online AI unavailable. Using offline fallback strategy.)`;
+  }
+}
+
+function getLoanDocuments(loanId) {
+  if (!loanId) return [];
+  const store = loadVaultStore();
+  return Array.isArray(store[loanId]) ? store[loanId] : [];
+}
+
+function setLoanDocuments(loanId, docs) {
+  if (!loanId) return;
+  const store = loadVaultStore();
+  store[loanId] = docs;
+  saveVaultStore(store);
+}
+
+function renderDocumentVault(loan) {
+  if (!vaultDocList) return;
+  if (!loan) {
+    vaultDocList.innerHTML = '<li class="muted">Open a loan to see documents.</li>';
+    return;
+  }
+
+  const docs = getLoanDocuments(loan.id);
+  if (!docs.length) {
+    vaultDocList.innerHTML = '<li class="muted">No documents yet for this loan.</li>';
+    return;
+  }
+
+  vaultDocList.innerHTML = docs
+    .map(
+      (doc) => `<li class="vault-item">
+        <div>
+          <strong>${escapeHtml(doc.title)}</strong>
+          <p class="muted vault-meta">${escapeHtml(doc.type)} · ${new Date(doc.createdAt).toLocaleDateString("en-US")}</p>
+          ${doc.note ? `<p class="vault-note">${escapeHtml(doc.note)}</p>` : ""}
+        </div>
+        <div class="detail-actions">
+          ${doc.dataUrl ? `<button class="btn" type="button" data-action="open" data-doc-id="${doc.id}">Open</button>` : ""}
+          <button class="btn" type="button" data-action="delete" data-doc-id="${doc.id}">Delete</button>
+        </div>
+      </li>`
+    )
+    .join("");
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Unable to read file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addVaultDocument() {
+  if (!selectedLoanData) {
+    setAppMessage("Open a loan before adding documents.");
+    return;
+  }
+
+  const title = (vaultDocTitle && vaultDocTitle.value.trim()) || "";
+  const note = (vaultDocNote && vaultDocNote.value.trim()) || "";
+  const type = (vaultDocType && vaultDocType.value) || "Other";
+  const file = vaultDocFile && vaultDocFile.files ? vaultDocFile.files[0] : null;
+
+  if (!title && !file) {
+    setAppMessage("Add a title or select a file for the document.");
+    return;
+  }
+  if (file && file.size > 2 * 1024 * 1024) {
+    setAppMessage("File too large. Keep each document under 2MB.");
+    return;
+  }
+
+  const docs = getLoanDocuments(selectedLoanData.id);
+  let dataUrl = "";
+  if (file) {
+    dataUrl = await readFileAsDataUrl(file);
+  }
+
+  const nextDoc = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: title || file.name,
+    type,
+    note,
+    fileName: file ? file.name : "",
+    dataUrl,
+    createdAt: new Date().toISOString(),
+  };
+
+  setLoanDocuments(selectedLoanData.id, [nextDoc, ...docs].slice(0, 25));
+  if (vaultDocTitle) vaultDocTitle.value = "";
+  if (vaultDocNote) vaultDocNote.value = "";
+  if (vaultDocFile) vaultDocFile.value = "";
+  renderDocumentVault(selectedLoanData);
+  setAppMessage("Document added to vault.", false);
+}
+
+function handleVaultListClick(event) {
+  if (!selectedLoanData || !vaultDocList) return;
+  const button = event.target.closest("button[data-doc-id]");
+  if (!button) return;
+  const action = button.dataset.action;
+  const docId = button.dataset.docId;
+  const docs = getLoanDocuments(selectedLoanData.id);
+  const targetDoc = docs.find((doc) => doc.id === docId);
+  if (!targetDoc) return;
+
+  if (action === "open" && targetDoc.dataUrl) {
+    const link = document.createElement("a");
+    link.href = targetDoc.dataUrl;
+    link.download = targetDoc.fileName || `${targetDoc.title}.file`;
+    link.click();
+    return;
+  }
+
+  if (action === "delete") {
+    const nextDocs = docs.filter((doc) => doc.id !== docId);
+    setLoanDocuments(selectedLoanData.id, nextDocs);
+    renderDocumentVault(selectedLoanData);
+    setAppMessage("Document removed.", false);
+  }
 }
 
 function buildPenaltyTracker(loans) {
@@ -1313,6 +1695,7 @@ async function renderLoanDetails(loanId) {
     { label: "Processing Fee", value: formatCurrency(loan.processing_fee, getDisplayCurrency(loan)) },
     { label: "Total Outflow", value: formatCurrency(totals.projectedTotal, getDisplayCurrency(loan)) },
   ]);
+  renderDocumentVault(loan);
 
   scheduleBody.innerHTML = "";
   rows.forEach((row) => {
@@ -1480,6 +1863,12 @@ async function logout() {
   selectedLoanId = null;
   selectedLoanData = null;
   closeEditPanel();
+  if (copilotOutput) {
+    copilotOutput.textContent = "Add loans and ask a question to get strategy suggestions.";
+  }
+  if (vaultDocList) {
+    vaultDocList.innerHTML = "";
+  }
   setAppMessage("Logged out.", false);
   showDashboardPage();
   showAuth();
@@ -1758,6 +2147,41 @@ async function boot() {
       runGoalPlanner();
     });
   }
+  if (askCopilotBtn) {
+    askCopilotBtn.addEventListener("click", async () => {
+      await runCopilot(copilotInput ? copilotInput.value : "");
+    });
+  }
+  if (copilotInput) {
+    copilotInput.addEventListener("keydown", async (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        await runCopilot(copilotInput.value);
+      }
+    });
+  }
+  if (copilotFocusHighestBtn) {
+    copilotFocusHighestBtn.addEventListener("click", async () => {
+      await runCopilot("focus highest apr");
+    });
+  }
+  if (copilotPenaltyPlanBtn) {
+    copilotPenaltyPlanBtn.addEventListener("click", async () => {
+      await runCopilot("penalty rescue");
+    });
+  }
+  if (addVaultDocBtn) {
+    addVaultDocBtn.addEventListener("click", async () => {
+      try {
+        await addVaultDocument();
+      } catch (error) {
+        setAppMessage(error && error.message ? error.message : "Failed to add document.");
+      }
+    });
+  }
+  if (vaultDocList) {
+    vaultDocList.addEventListener("click", handleVaultListClick);
+  }
   if (goalLoanSelect) {
     goalLoanSelect.addEventListener("change", () => {
       runGoalPlanner();
@@ -1801,9 +2225,6 @@ async function boot() {
     editLoanForm.addEventListener("submit", saveEditedLoan);
   }
   if (logoutBtn) logoutBtn.addEventListener("click", logout);
-  if (logoutBtnDetail) logoutBtnDetail.addEventListener("click", logout);
-  if (logoutBtnAllLoans) logoutBtnAllLoans.addEventListener("click", logout);
-
   if (globalCurrency) {
     const savedCurrency = loadSavedDisplayCurrency();
     selectedDisplayCurrency = savedCurrency;

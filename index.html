@@ -114,6 +114,32 @@
           </header>
           <p id="appMessage" class="message app-message"></p>
           <section class="dashboard-columns insights-grid">
+            <article class="card">
+              <h3>Rewards & Streaks</h3>
+              <div id="rewardStats" class="stats-grid"></div>
+              <div id="rewardBadges" class="badge-grid"></div>
+            </article>
+            <article class="card">
+              <h3>AI Copilot</h3>
+              <div class="form copilot-form">
+                <label>
+                  Ask Copilot
+                  <input
+                    id="copilotInput"
+                    type="text"
+                    placeholder="How can I close my highest-interest loan faster?"
+                  />
+                </label>
+                <div class="detail-actions">
+                  <button id="askCopilotBtn" class="btn primary" type="button">Ask</button>
+                  <button id="copilotFocusHighestBtn" class="btn" type="button">Focus Highest APR</button>
+                  <button id="copilotPenaltyPlanBtn" class="btn" type="button">Penalty Rescue</button>
+                </div>
+              </div>
+              <div id="copilotOutput" class="copilot-output muted">Add loans and ask a question to get strategy suggestions.</div>
+            </article>
+          </section>
+          <section class="dashboard-columns insights-grid">
             <div class="stack-col">
               <article class="card">
                 <h3>Portfolio Insights</h3>
@@ -372,6 +398,36 @@
               </form>
             </section>
             <div id="detailStats" class="stats-grid detail-stats"></div>
+            <section class="card document-vault">
+              <h4>Document Vault</h4>
+              <p class="muted">Attach references for this loan (stored locally in this browser).</p>
+              <div class="form two-col-form vault-form">
+                <label>
+                  Document Title
+                  <input type="text" id="vaultDocTitle" placeholder="Sanction Letter" />
+                </label>
+                <label>
+                  Type
+                  <select id="vaultDocType">
+                    <option value="Agreement">Agreement</option>
+                    <option value="Statement">Statement</option>
+                    <option value="Receipt">Receipt</option>
+                    <option value="Insurance">Insurance</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </label>
+                <label>
+                  File
+                  <input type="file" id="vaultDocFile" />
+                </label>
+                <label>
+                  Note
+                  <input type="text" id="vaultDocNote" placeholder="Uploaded from bank email" />
+                </label>
+                <button id="addVaultDocBtn" class="btn primary" type="button">Add Document</button>
+              </div>
+              <ul id="vaultDocList" class="due-list vault-list"></ul>
+            </section>
 
             <div class="table-wrap">
               <table>
@@ -420,7 +476,12 @@
           </section>
         </section>
       </section>
-      <footer class="main-footer muted">Made by Nikhil Jaiswal</footer>
+      <footer class="main-footer muted">
+        Made by
+        <a href="https://www.linkedin.com/in/nikhiljaiswal10/" target="_blank" rel="noopener noreferrer">
+          Nikhil Jaiswal
+        </a>
+      </footer>
     </main>
     <div id="loadingOverlay" class="loading-overlay hidden" aria-live="polite">
       <div class="loader"></div>

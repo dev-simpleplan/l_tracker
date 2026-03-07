@@ -30,9 +30,16 @@ Because this is a static app, run any static server from project root:
 1. Push this project to GitHub.
 2. Import repo into Vercel.
 3. Framework preset: `Other`.
-4. Deploy (no build command needed).
+4. Add environment variable `GEMINI_API_KEY` in Vercel Project Settings -> Environment Variables.
+5. Deploy (no build command needed).
 
 Important: keep `supabase-config.js` with your actual keys in deployment.
+
+## 6) AI Copilot (Gemini)
+
+- The dashboard Copilot now calls `/api/copilot` (Vercel serverless function).
+- The serverless function uses Google Gemini via `GEMINI_API_KEY`.
+- If Gemini is unavailable, the app falls back to offline rule-based suggestions.
 
 ## 5) Deploy alternatives
 
