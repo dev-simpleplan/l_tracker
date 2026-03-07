@@ -1110,10 +1110,11 @@ function isWeakCopilotResponse(text) {
   if (!value) return true;
   const lines = value
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => line.replace(/^[\s>*-]+/, "").trim())
     .filter(Boolean);
-  const numbered = lines.filter((line) => /^\d+[\).\s]/.test(line)).length;
-  return lines.length < 3 || numbered < 2;
+  const numbered = lines.filter((line) => /^\**\s*\d+[\).\s]/.test(line)).length;
+  if (value.length >= 120) return false;
+  return lines.length < 2 && numbered < 1;
 }
 
 async function runCopilot(queryText) {
@@ -1128,8 +1129,8 @@ async function runCopilot(queryText) {
         cachedLoans
       );
     }
-    if (isWeakCopilotResponse(answer)) {
-      throw new Error("Copilot response was too short");
+    if (!String(answer || "").trim()) {
+      throw new Error("Copilot response was empty");
     }
     copilotOutput.textContent = answer;
   } catch (error) {
