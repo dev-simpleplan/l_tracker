@@ -114,6 +114,19 @@ function formatCurrency(value, currencyCode = "USD") {
   }
 }
 
+function formatCompactNumber(value) {
+  const amount = parseNumber(value);
+  try {
+    return new Intl.NumberFormat("en-US", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(amount);
+  } catch (_error) {
+    if (amount >= 1000) return `${Math.round(amount / 100) / 10}K`;
+    return String(Math.round(amount));
+  }
+}
+
 function getDisplayCurrency(loan) {
   if (selectedDisplayCurrency && selectedDisplayCurrency !== "AUTO") {
     return selectedDisplayCurrency;
@@ -138,7 +151,9 @@ function applyTheme(theme) {
   const isDark = theme === "dark";
   document.body.classList.toggle("dark-mode", isDark);
   if (themeToggle) {
-    themeToggle.textContent = isDark ? "Light Mode" : "Dark Mode";
+    themeToggle.textContent = isDark ? "🌙" : "☀️";
+    themeToggle.setAttribute("aria-label", isDark ? "Dark mode active" : "Light mode active");
+    themeToggle.setAttribute("title", isDark ? "Dark Mode" : "Light Mode");
   }
 }
 
@@ -539,7 +554,8 @@ function buildVisualAnalytics(loans) {
     summaryDonut.style.setProperty("--donut-fill", "0");
     summaryDonutText.textContent = "0%";
     summaryDonutMeta.textContent = "No loans yet";
-    trendBars.innerHTML = '<p class="muted">Add loans to view monthly trend.</p>';
+    trendBars.classList.add("is-empty");
+    trendBars.innerHTML = '<p class="trend-empty muted">Add loans to view monthly trend.</p>';
     return;
   }
 
@@ -589,10 +605,12 @@ function buildVisualAnalytics(loans) {
   const maxMonthly = monthlyEntries.reduce((max, [, value]) => Math.max(max, value), 0);
 
   if (!monthlyEntries.length || maxMonthly <= 0) {
-    trendBars.innerHTML = '<p class="muted">No monthly EMI trend available yet.</p>';
+    trendBars.classList.add("is-empty");
+    trendBars.innerHTML = '<p class="trend-empty muted">No monthly EMI trend available yet.</p>';
     return;
   }
 
+  trendBars.classList.remove("is-empty");
   trendBars.innerHTML = "";
   monthlyEntries.forEach(([monthKey, amount]) => {
     const bar = document.createElement("div");
@@ -604,8 +622,15 @@ function buildVisualAnalytics(loans) {
     bar.title = `${longMonthLabel(monthKey)}: ${formatCurrency(amount, preferredCurrency)}`;
 
     const label = document.createElement("span");
+    label.className = "month-label";
     label.textContent = monthDateFromKey(monthKey).toLocaleString("en-US", { month: "short" });
     bar.appendChild(label);
+
+    const badge = document.createElement("span");
+    badge.className = "amount-badge";
+    badge.textContent = formatCompactNumber(amount);
+    bar.appendChild(badge);
+
     trendBars.appendChild(bar);
   });
 }
@@ -1045,11 +1070,13 @@ function updateAuthTabs(showLogin) {
 function showAuth() {
   authView.classList.remove("hidden");
   appView.classList.add("hidden");
+  if (logoutBtn) logoutBtn.classList.add("hidden");
 }
 
 function showApp() {
   authView.classList.add("hidden");
   appView.classList.remove("hidden");
+  if (logoutBtn) logoutBtn.classList.remove("hidden");
 }
 
 function showDashboardPage() {
@@ -1234,7 +1261,9 @@ function renderAllLoansSheet(loans) {
       const monthCell = loanMonthMap[monthKey];
       if (monthCell.emiDue > 0.0001) {
         const stateClass = monthCell.paid
-          ? "paid-cell"
+          ? monthCell.isPaidLate
+            ? "paid-late-cell"
+            : "paid-cell"
           : monthCell.isOverdue
           ? "overdue-cell"
           : "pending-cell";
@@ -1288,7 +1317,7 @@ async function renderLoanDetails(loanId) {
   scheduleBody.innerHTML = "";
   rows.forEach((row) => {
     const tr = document.createElement("tr");
-    if (row.paid) tr.classList.add("paid");
+    if (row.paid) tr.classList.add(row.isPaidLate ? "paid-late" : "paid");
     else if (row.isClosed) tr.classList.add("closed");
     else if (row.isOverdue) tr.classList.add("overdue");
 

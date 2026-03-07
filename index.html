@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Loan Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -16,7 +22,12 @@
             <p class="muted">Track EMIs, interest, and reminders</p>
           </div>
         </div>
-        <button id="themeToggle" class="btn" type="button">Dark Mode</button>
+        <div class="header-actions">
+          <button id="themeToggle" class="btn icon-toggle" type="button" aria-label="Toggle theme">
+            ☀️
+          </button>
+          <button id="logoutBtn" class="btn hidden" type="button">Logout</button>
+        </div>
       </header>
 
       <section id="authView" class="auth-layout">
@@ -74,35 +85,31 @@
       </section>
 
       <section id="appView" class="hidden">
-        <section class="card currency-bar">
-          <div class="currency-controls">
-            <label>
-              Display Currency
-              <select id="globalCurrency">
-                <option value="AUTO">Auto (Use each loan currency)</option>
-                <option value="USD">USD - US Dollar</option>
-                <option value="INR">INR - Indian Rupee</option>
-                <option value="EUR">EUR - Euro</option>
-                <option value="GBP">GBP - British Pound</option>
-                <option value="AED">AED - UAE Dirham</option>
-                <option value="CAD">CAD - Canadian Dollar</option>
-              </select>
-            </label>
-            <button id="saveCurrencyBtn" class="btn" type="button">Save Currency</button>
-          </div>
-          <p class="muted">Display format only. Amount conversion across currencies is not applied.</p>
-        </section>
-
         <section id="dashboardSection">
           <header class="topbar card">
-            <div>
+            <div class="dashboard-head-left">
               <h2>Dashboard</h2>
               <p id="welcomeText" class="muted"></p>
+              <div class="currency-inline">
+                <label>
+                  Display Currency
+                  <select id="globalCurrency">
+                    <option value="AUTO">Auto (Use each loan currency)</option>
+                    <option value="USD">USD - US Dollar</option>
+                    <option value="INR">INR - Indian Rupee</option>
+                    <option value="EUR">EUR - Euro</option>
+                    <option value="GBP">GBP - British Pound</option>
+                    <option value="AED">AED - UAE Dirham</option>
+                    <option value="CAD">CAD - Canadian Dollar</option>
+                  </select>
+                </label>
+                <button id="saveCurrencyBtn" class="btn" type="button">Save Currency</button>
+              </div>
+              <p class="muted currency-note">Display format only. Amount conversion across currencies is not applied.</p>
             </div>
             <div class="detail-actions">
               <button id="openAllLoansPage" class="btn" type="button">All Loans Sheet</button>
               <button id="scrollToAddLoanBtn" class="btn" type="button">Add New Loan</button>
-              <button id="logoutBtn" class="btn" type="button">Logout</button>
             </div>
           </header>
           <p id="appMessage" class="message app-message"></p>
@@ -258,19 +265,23 @@
           </section>
           <section class="grid insights-grid">
             <article class="card">
-              <h3>Export Center</h3>
-              <div class="form">
-                <label>
-                  Loan for single export
-                  <select id="exportLoanSelect"></select>
-                </label>
-                <div class="detail-actions">
-                  <button id="exportLoanCsvBtn" class="btn" type="button">Export Loan CSV</button>
-                  <button id="exportLoanPdfBtn" class="btn" type="button">Export Loan PDF</button>
+              <div class="export-layout">
+                <div class="export-left">
+                  <h3>Export Center</h3>
+                  <label>
+                    Loan for single export
+                    <select id="exportLoanSelect"></select>
+                  </label>
                 </div>
-                <div class="detail-actions">
-                  <button id="exportPortfolioCsvBtn" class="btn" type="button">Export Portfolio CSV</button>
-                  <button id="exportPortfolioPdfBtn" class="btn" type="button">Export Portfolio PDF</button>
+                <div class="export-right">
+                  <div class="detail-actions">
+                    <button id="exportLoanCsvBtn" class="btn" type="button">Export Loan CSV</button>
+                    <button id="exportLoanPdfBtn" class="btn" type="button">Export Loan PDF</button>
+                  </div>
+                  <div class="detail-actions">
+                    <button id="exportPortfolioCsvBtn" class="btn" type="button">Export Portfolio CSV</button>
+                    <button id="exportPortfolioPdfBtn" class="btn" type="button">Export Portfolio PDF</button>
+                  </div>
                 </div>
               </div>
             </article>
@@ -287,7 +298,6 @@
               <button id="editLoanBtn" class="btn" type="button">Edit Loan</button>
               <button id="deleteLoanBtn" class="btn" type="button">Delete Loan</button>
               <button id="backToDashboard" class="btn" type="button">Back</button>
-              <button id="logoutBtnDetail" class="btn" type="button">Logout</button>
             </div>
           </header>
 
@@ -397,7 +407,6 @@
             </div>
             <div class="detail-actions">
               <button id="backFromAllLoans" class="btn" type="button">Back</button>
-              <button id="logoutBtnAllLoans" class="btn" type="button">Logout</button>
             </div>
           </header>
 
