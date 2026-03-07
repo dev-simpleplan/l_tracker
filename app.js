@@ -1105,11 +1105,32 @@ async function getOnlineCopilotAdvice(queryText, loans) {
   return text;
 }
 
+function isWeakCopilotResponse(text) {
+  const value = String(text || "").trim();
+  if (!value) return true;
+  const lines = value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const numbered = lines.filter((line) => /^\d+[\).\s]/.test(line)).length;
+  return lines.length < 3 || numbered < 2;
+}
+
 async function runCopilot(queryText) {
   if (!copilotOutput) return;
   copilotOutput.textContent = "Thinking...";
   try {
-    const answer = await getOnlineCopilotAdvice(queryText, cachedLoans);
+    let answer = await getOnlineCopilotAdvice(queryText, cachedLoans);
+    if (isWeakCopilotResponse(answer)) {
+      // One quick retry with stronger instruction by augmenting the question.
+      answer = await getOnlineCopilotAdvice(
+        `${queryText || "Help me"} - return exactly 4 numbered steps (1-4), no intro heading.`,
+        cachedLoans
+      );
+    }
+    if (isWeakCopilotResponse(answer)) {
+      throw new Error("Copilot response was too short");
+    }
     copilotOutput.textContent = answer;
   } catch (error) {
     const fallback = buildCopilotAdvice(queryText, cachedLoans);
