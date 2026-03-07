@@ -1088,7 +1088,14 @@ async function getOnlineCopilotAdvice(queryText, loans) {
     "Copilot request timed out"
   );
   if (!response.ok) {
-    throw new Error("Copilot API unavailable");
+    let details = "";
+    try {
+      const errorPayload = await response.json();
+      details = errorPayload && (errorPayload.details || errorPayload.error) ? `: ${errorPayload.details || errorPayload.error}` : "";
+    } catch (_error) {
+      // ignore parse errors, use generic message
+    }
+    throw new Error(`Copilot API unavailable${details}`);
   }
   const payload = await response.json();
   const text = (payload && payload.response ? String(payload.response) : "").trim();
@@ -1104,9 +1111,10 @@ async function runCopilot(queryText) {
   try {
     const answer = await getOnlineCopilotAdvice(queryText, cachedLoans);
     copilotOutput.textContent = answer;
-  } catch (_error) {
+  } catch (error) {
     const fallback = buildCopilotAdvice(queryText, cachedLoans);
-    copilotOutput.textContent = `${fallback}\n\n(Online AI unavailable. Using offline fallback strategy.)`;
+    const reason = error && error.message ? error.message : "Unknown error";
+    copilotOutput.textContent = `${fallback}\n\n(Online AI unavailable. Using offline fallback strategy.)\n[Debug: ${reason}]`;
   }
 }
 

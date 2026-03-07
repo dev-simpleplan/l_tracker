@@ -24,24 +24,44 @@ module.exports = async function handler(req, res) {
       `User question: ${safeQuestion}`,
     ].join("\n");
 
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 260,
-          },
-        }),
-      }
+    const preferredModel = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    const modelCandidates = [preferredModel, "gemini-2.0-flash", "gemini-1.5-flash"].filter(
+      (model, index, arr) => model && arr.indexOf(model) === index
     );
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
-      res.status(502).json({ error: "Gemini request failed", details: errorText.slice(0, 400) });
+    let geminiResponse = null;
+    let lastErrorText = "";
+    let usedModel = "";
+
+    for (const model of modelCandidates) {
+      usedModel = model;
+      geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          model
+        )}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.4,
+              maxOutputTokens: 260,
+            },
+          }),
+        }
+      );
+
+      if (geminiResponse.ok) break;
+      lastErrorText = await geminiResponse.text();
+      if (geminiResponse.status !== 404) break;
+    }
+
+    if (!geminiResponse || !geminiResponse.ok) {
+      res.status(502).json({
+        error: "Gemini request failed",
+        details: `[model=${usedModel}] ${lastErrorText.slice(0, 600)}`,
+      });
       return;
     }
 
@@ -61,7 +81,7 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    res.status(200).json({ response: responseText });
+    res.status(200).json({ response: responseText, model: usedModel });
   } catch (error) {
     res.status(500).json({ error: "Copilot server error", details: error && error.message ? error.message : "" });
   }
