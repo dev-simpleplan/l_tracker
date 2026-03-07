@@ -66,16 +66,18 @@ module.exports = async function handler(req, res) {
     }
 
     const payload = await geminiResponse.json();
-    const text =
+    const parts =
       payload &&
       payload.candidates &&
       payload.candidates[0] &&
       payload.candidates[0].content &&
-      payload.candidates[0].content.parts &&
-      payload.candidates[0].content.parts[0] &&
-      payload.candidates[0].content.parts[0].text;
-
-    const responseText = String(text || "").trim();
+      Array.isArray(payload.candidates[0].content.parts)
+        ? payload.candidates[0].content.parts
+        : [];
+    const responseText = parts
+      .map((part) => (part && typeof part.text === "string" ? part.text : ""))
+      .join("\n")
+      .trim();
     if (!responseText) {
       res.status(502).json({ error: "Gemini returned empty response" });
       return;
